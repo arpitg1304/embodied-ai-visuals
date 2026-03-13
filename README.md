@@ -20,6 +20,35 @@ Interactive animations explaining core concepts in robotics and embodied intelli
 - **Mobile friendly** — responsive layout that works on any device
 - **Auto-deploy** — push to `main` and GitHub Actions deploys to Pages
 
+## Roadmap
+
+Planned animations, roughly ordered by pedagogical flow. Contributions welcome!
+
+### Perception & Representation
+- [ ] **Visual Encoders Compared** — CNN vs ViT vs DINOv2: how each architecture turns pixels into features, and why foundation vision models changed robotics
+- [ ] **Point Cloud Processing** — From raw depth sensor → voxel grid → PointNet features. Show how 3D understanding feeds into grasp planning
+- [ ] **Spatial Action Maps** — How pixel-space affordance maps let robots decide *where* to act directly from images
+
+### Planning & Control
+- [ ] **MPC vs Learned Policies** — Model Predictive Control re-plans every step; a learned policy runs open-loop. Animated side-by-side on the same task
+- [ ] **Inverse Kinematics Explained** — Given a target end-effector pose, how the robot solves for joint angles — Jacobian, gradient descent, singularities
+- [ ] **Task and Motion Planning (TAMP)** — High-level symbolic plan ("pick → place → stack") grounded into continuous motion trajectories
+- [ ] **Behavior Trees vs FSMs** — Two paradigms for structuring robot decision-making, animated with a pick-and-place example
+
+### Learning & Adaptation
+- [ ] **Imitation Learning Pipeline** — Human demo → trajectory encoding → policy distillation. Show how a few demonstrations become a generalizable skill
+- [ ] **Diffusion Policy** — Denoising process that iteratively refines random noise into a smooth action trajectory — the key insight behind diffusion-based robot control
+- [ ] **Hindsight Experience Replay** — Failed trajectories relabeled with achieved goals — turning failures into training signal
+- [ ] **Curriculum Learning for Manipulation** — Progressively harder tasks: reach → touch → grasp → lift → stack
+
+### Multi-Agent & Communication
+- [ ] **Multi-Robot Task Allocation** — How a team of robots divides tasks using auction-based or graph-based coordination
+- [ ] **Human-Robot Handoff** — Timing, grip force negotiation, and intent prediction during object handovers
+
+### Safety & Deployment
+- [ ] **Safe RL with Constraints** — Reward maximization *plus* constraint satisfaction — how robots learn to be both capable and safe
+- [ ] **Failure Detection & Recovery** — How robots monitor execution, detect anomalies, and trigger recovery behaviors in real-time
+
 ## Adding a new animation
 
 1. Copy the template: `cp animations/_template.html animations/your_name.html`
