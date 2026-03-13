@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Video Action Models &amp; Latent Space</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#1a1a1a;padding:24px 32px;margin:0}
+@media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#e8e6e0}}
+.vd{width:7px;height:7px;border-radius:50%;background:#ccc;cursor:pointer;border:none;padding:0;flex-shrink:0;transition:background .2s}
+.vd.on{background:#1a1a1a}
+@media(prefers-color-scheme:dark){.vd{background:#555}.vd.on{background:#e8e6e0}}
+.vb{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;border:0.5px solid #ccc;background:transparent;cursor:pointer;color:inherit;transition:background .15s}
+.vb:hover{background:#f0efea}
+@media(prefers-color-scheme:dark){.vb:hover{background:#2a2a2a}}
+#vtit{font-size:14px;font-weight:500}
+#vdsc{font-size:12px;color:#666;margin-top:3px;line-height:1.5}
+@media(prefers-color-scheme:dark){#vdsc{color:#aaa}}
+#vp-bar{height:2px;background:#eee;border-radius:1px;overflow:hidden;margin:12px 0 10px}
+@media(prefers-color-scheme:dark){#vp-bar{background:#333}}
+#vp{height:100%;width:0%;background:#1a1a1a}
+@media(prefers-color-scheme:dark){#vp{background:#e8e6e0}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px" id="vdots"></div>
+<div style="margin-bottom:14px">
+  <div id="vtit"></div>
+  <div id="vdsc"></div>
+</div>
+<div id="va" style="min-height:220px"></div>
+<div id="vp-bar"><div id="vp"></div></div>
+<div style="display:flex;align-items:center;justify-content:center;gap:10px">
+  <button class="vb" style="width:36px;height:36px;font-size:14px" onclick="vn(-1)">&#8592;</button>
+  <button class="vb" id="vplay" style="width:44px;height:44px;font-size:16px" onclick="vtg()">&#9646;&#9646;</button>
+  <button class="vb" style="width:36px;height:36px;font-size:14px" onclick="vn(1)">&#8594;</button>
+</div>
+<script>
+const dark=window.matchMedia('(prefers-color-scheme:dark)').matches;
+const TS=dark?'#aaa':'#555', TT=dark?'#666':'#888780';
+let manim=null;
+function stopAnim(){if(manim){clearTimeout(manim);manim=null;}}
+const AR=`<defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>`;
+
+const VS=[
+  {t:'1 / 5 — Video as input: temporal context',
+   d:'Unlike a single-image policy, a video action model ingests a sequence of frames. Temporal context reveals velocity, intent, and trajectory — not just the current pose.',f:s1},
+  {t:'2 / 5 — Encoding frames to latent space',
+   d:'A visual encoder compresses each 224×224 frame (~600 KB) into a compact 512-dimensional vector (~2 KB). All downstream reasoning happens in this compressed space.',f:s2},
+  {t:'3 / 5 — What latent space looks like',
+   d:'Similar actions cluster together. The model learns a geometry where "pick red cube" and "grasp cylinder" are neighbors — even across different lighting and camera angles.',f:s3},
+  {t:'4 / 5 — Predicting the future in latent space',
+   d:'The dynamics model predicts z_{t+k} — the future latent — without generating pixels. Predicting in latent space is orders of magnitude cheaper than predicting raw video frames.',f:s4},
+  {t:'5 / 5 — Decoding latent to robot action',
+   d:'The predicted future latent z_{t+k} passes through a lightweight action decoder. Output: a 7-DoF motor command sent directly to the robot controller — no pixel rendering needed.',f:s5},
+];
+
+let vi=0,vplay=true,vpr=0,vtmr;
+const VDUR=5400,VTK=50;
+const dotsEl=document.getElementById('vdots');
+VS.forEach((_,i)=>{const d=document.createElement('button');d.className='vd';d.id='vd'+i;d.onclick=()=>vg(i);dotsEl.appendChild(d);});
+function vg(i){vi=i;vr();vrst();}
+function vn(d){vi=(vi+d+VS.length)%VS.length;vr();vrst();}
+function vr(){
+  stopAnim();
+  VS.forEach((_,i)=>document.getElementById('vd'+i).className='vd'+(i===vi?' on':''));
+  document.getElementById('vtit').textContent=VS[vi].t;
+  document.getElementById('vdsc').textContent=VS[vi].d;
+  const a=document.getElementById('va');a.style.animation='none';void a.offsetWidth;a.style.animation='fadeUp .3s ease';
+  a.innerHTML='';VS[vi].f(a);
+}
+function vrst(){clearInterval(vtmr);vpr=0;document.getElementById('vp').style.width='0%';if(vplay)vstrt();}
+function vstrt(){vtmr=setInterval(()=>{vpr+=100*VTK/VDUR;document.getElementById('vp').style.width=Math.min(vpr,100)+'%';if(vpr>=100){clearInterval(vtmr);vi=(vi+1)%VS.length;vr();vpr=0;document.getElementById('vp').style.width='0%';vstrt();}},VTK);}
+function vtg(){vplay=!vplay;document.getElementById('vplay').innerHTML=vplay?'&#9646;&#9646;':'&#9654;';if(vplay)vstrt();else clearInterval(vtmr);}
+
+function s1(el){
+  const fw=98,fh=68,fy=30,gap=16;
+  const fx=[40,154,268,382,496];
+  const labels=['t−2','t−1','t','t+1','t+2'];
+  const fills=['#E6F1FB','#B5D4F4','#378ADD','none','none'];
+  const strokes=['#B5D4F4','#85B7EB','#185FA5','#888780','#888780'];
+  const eeRelX=[80,64,48,32,16];
+  const eeRelY=[22,18,15,12,9];
+
+  let svg=AR;
+  fx.forEach((x,i)=>{
+    const ip=i>=3;
+    const da=ip?'stroke-dasharray="4 3"':'';
+    svg+=`<rect x="${x}" y="${fy}" width="${fw}" height="${fh}" rx="3" fill="${fills[i]}" stroke="${strokes[i]}" stroke-width="0.5" ${da}/>`;
+    svg+=`<text x="${x+fw/2}" y="${fy+fh-9}" text-anchor="middle" font-size="9" fill="${ip?TT:'#0C447C'}">${labels[i]}</text>`;
+    if(!ip){
+      svg+=`<rect x="${x+7}" y="${fy+fh-22}" width="13" height="13" rx="1" fill="#3B6D11" opacity="0.85"/>`;
+      const ecx=x+eeRelX[i],ecy=fy+eeRelY[i];
+      svg+=`<line x1="${x+fw/2}" y1="${fy+fh}" x2="${ecx}" y2="${ecy}" stroke="#B4B2A9" stroke-width="2" stroke-linecap="round"/>`;
+      svg+=`<circle cx="${ecx}" cy="${ecy}" r="6" fill="#E86420"/>`;
+    } else {
+      const ecx=x+eeRelX[i],ecy=fy+eeRelY[i];
+      svg+=`<circle cx="${ecx}" cy="${ecy}" r="6" fill="none" stroke="#E86420" stroke-width="0.8" stroke-dasharray="3 2"/>`;
+    }
+  });
+
+  const pts=fx.map((x,i)=>`${x+eeRelX[i]},${fy+eeRelY[i]}`).join(' ');
+  svg+=`<polyline points="${pts}" fill="none" stroke="#E86420" stroke-width="1" stroke-dasharray="5 3" opacity="0.5"/>`;
+
+  const ay=fy+fh+18;
+  svg+=`<line x1="40" y1="${ay}" x2="${496+fw}" y2="${ay}" stroke="#C4C0B8" stroke-width="0.5" marker-end="url(#ar)"/>`;
+  svg+=`<text x="317" y="${ay+13}" text-anchor="middle" font-size="10" fill="${TT}">time</text>`;
+
+  const ly=ay+36;
+  svg+=`<circle cx="46" cy="${ly}" r="5" fill="#E86420"/><text x="57" y="${ly}" dominant-baseline="central" font-size="10" fill="${TS}">end-effector</text>`;
+  svg+=`<rect x="184" y="${ly-5}" width="10" height="10" rx="1" fill="#378ADD"/><text x="198" y="${ly}" dominant-baseline="central" font-size="10" fill="${TS}">observed</text>`;
+  svg+=`<rect x="272" y="${ly-5}" width="10" height="10" rx="1" fill="none" stroke="#888780" stroke-width="0.5" stroke-dasharray="3 2"/><text x="286" y="${ly}" dominant-baseline="central" font-size="10" fill="${TS}">to predict</text>`;
+  svg+=`<rect x="376" y="${ly-5}" width="10" height="10" rx="1" fill="#3B6D11"/><text x="390" y="${ly}" dominant-baseline="central" font-size="10" fill="${TS}">target object</text>`;
+
+  svg+=`<text x="340" y="212" text-anchor="middle" font-size="11" fill="${TS}">Temporal context reveals velocity and intent — information invisible in a single frame.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 680 220">${svg}</svg>`;
+}
+
+function s2(el){
+  let svg=AR;
+
+  svg+=`<text x="100" y="14" text-anchor="middle" font-size="11" font-weight="500" fill="#185FA5">pixel space</text>`;
+  svg+=`<rect x="38" y="38" width="148" height="100" rx="3" fill="${dark?'#1a2a3a':'#B5D4F4'}" stroke="#85B7EB" stroke-width="0.5"/>`;
+  svg+=`<rect x="32" y="32" width="148" height="100" rx="3" fill="${dark?'#1c2c40':'#85B7EB'}" stroke="#378ADD" stroke-width="0.5"/>`;
+  svg+=`<rect x="26" y="26" width="148" height="100" rx="3" fill="${dark?'#132038':'#E6F1FB'}" stroke="#B5D4F4" stroke-width="0.5"/>`;
+  svg+=`<rect x="26" y="26" width="148" height="30" fill="${dark?'#1a3050':'#C8DFF5'}" opacity="0.6"/>`;
+  svg+=`<rect x="26" y="96" width="148" height="30" fill="${dark?'#1e2a18':'#C8D8B8'}" opacity="0.5"/>`;
+  svg+=`<rect x="38" y="98" width="14" height="14" rx="1" fill="#3B6D11" opacity="0.8"/>`;
+  svg+=`<line x1="100" y1="126" x2="80" y2="86" stroke="${dark?'#888':'#5F5E5A'}" stroke-width="3" stroke-linecap="round"/>`;
+  svg+=`<line x1="80" y1="86" x2="52" y2="100" stroke="${dark?'#888':'#5F5E5A'}" stroke-width="2.5" stroke-linecap="round"/>`;
+  svg+=`<circle cx="52" cy="100" r="4" fill="#E86420"/>`;
+  svg+=`<text x="100" y="142" text-anchor="middle" font-size="10" fill="${TT}">224 × 224 × 3 pixels</text>`;
+  svg+=`<text x="100" y="154" text-anchor="middle" font-size="9" fill="${TT}">~600 KB per frame</text>`;
+
+  svg+=`<line x1="188" y1="76" x2="230" y2="76" stroke="${dark?'#888':'#888780'}" stroke-width="1" marker-end="url(#ar)"/>`;
+  svg+=`<text x="209" y="65" text-anchor="middle" font-size="9" fill="${TT}">encode</text>`;
+
+  svg+=`<text x="390" y="14" text-anchor="middle" font-size="11" font-weight="500" fill="#534AB7">latent space</text>`;
+
+  const vw=28,vh=100,vy=26;
+  const zs=[
+    {x:244,label:'z_{t-2}',op:0.32,hi:false,pred:false},
+    {x:290,label:'z_{t-1}',op:0.58,hi:false,pred:false},
+    {x:336,label:'z_t',op:1,hi:true,pred:false},
+    {x:382,label:'z_{t+1}',op:0.28,hi:false,pred:true},
+  ];
+  const vCols=['#534AB7','#E86420','#1D9E75','#D85A30','#378ADD','#639922','#BA7517','#993C1D'];
+  const segOps=[0.9,0.5,0.3,0.7,0.6,0.8,0.4,0.65];
+  const segH=vh/8;
+
+  zs.forEach(({x,label,op,hi,pred})=>{
+    vCols.forEach((c,j)=>{
+      svg+=`<rect x="${x}" y="${vy+j*segH}" width="${vw}" height="${segH-0.5}" fill="${c}" opacity="${(segOps[j]*op).toFixed(2)}"/>`;
+    });
+    const da=pred?'stroke-dasharray="4 3"':'';
+    svg+=`<rect x="${x}" y="${vy}" width="${vw}" height="${vh}" rx="2" fill="none" stroke="${hi?'#534AB7':'#888780'}" stroke-width="${hi?1.5:0.5}" ${da}/>`;
+    svg+=`<text x="${x+vw/2}" y="${vy+vh+14}" text-anchor="middle" font-size="9" fill="${pred?TT:TS}">${label}</text>`;
+    if(!pred && x<382){
+      svg+=`<line x1="${x+vw+2}" y1="${vy+vh/2}" x2="${x+vw+12}" y2="${vy+vh/2}" stroke="#C4C0B8" stroke-width="0.5" marker-end="url(#ar)"/>`;
+    }
+  });
+
+  svg+=`<rect x="234" y="${vy-18}" width="190" height="${vh+36}" rx="4" fill="none" stroke="#534AB7" stroke-width="0.5" stroke-dasharray="4 3"/>`;
+  svg+=`<text x="329" y="${vy-22}" text-anchor="middle" font-size="9" fill="#534AB7">latent sequence</text>`;
+
+  svg+=`<rect x="440" y="38" width="218" height="48" rx="6" fill="${dark?'#1a1a2e':'#EEEDFE'}" stroke="#AFA9EC" stroke-width="0.5"/>`;
+  svg+=`<text x="549" y="58" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="500" fill="#534AB7">300× compression</text>`;
+  svg+=`<text x="549" y="76" text-anchor="middle" dominant-baseline="central" font-size="10" fill="${TT}">600 KB → 2 KB per frame</text>`;
+
+  svg+=`<text x="440" y="100" text-anchor="middle" font-size="10" fill="${TT}">reasoning over 2 KB</text>`;
+  svg+=`<text x="440" y="114" text-anchor="middle" font-size="10" fill="${TT}">instead of 600 KB</text>`;
+
+  svg+=`<text x="340" y="210" text-anchor="middle" font-size="11" fill="${TS}">The model never touches raw pixels after encoding. All reasoning is in compact latent vectors.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 680 218">${svg}</svg>`;
+}
+
+function s3(el){
+  let svg=AR;
+
+  const clusters=[
+    {label:'pick & place',col:'#D85A30',ell:'#FAECE7',cx:185,cy:128,rx:44,ry:34,
+     pts:[[162,118],[188,108],[210,122],[204,142],[178,150],[155,134],[170,105],[215,130]]},
+    {label:'push',col:'#0F6E56',ell:'#E1F5EE',cx:358,cy:74,rx:42,ry:30,
+     pts:[[334,60],[360,52],[384,66],[378,86],[352,90],[330,76],[350,54],[396,80]]},
+    {label:'pour',col:'#534AB7',ell:'#EEEDFE',cx:508,cy:152,rx:42,ry:32,
+     pts:[[484,138],[510,130],[532,146],[526,166],[500,170],[478,154],[498,132],[538,158]]},
+  ];
+
+  for(let gx=80;gx<=620;gx+=90) svg+=`<line x1="${gx}" y1="22" x2="${gx}" y2="182" stroke="${dark?'#282828':'#F1EFE8'}" stroke-width="0.5"/>`;
+  for(let gy=40;gy<=160;gy+=40) svg+=`<line x1="40" y1="${gy}" x2="630" y2="${gy}" stroke="${dark?'#282828':'#F1EFE8'}" stroke-width="0.5"/>`;
+
+  svg+=`<text x="334" y="196" text-anchor="middle" font-size="10" fill="${TT}">latent dimension 1 (2D projection of 512-d space)</text>`;
+
+  clusters.forEach(({label,col,ell,cx,cy,rx,ry,pts})=>{
+    svg+=`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${ell}" stroke="${col}" stroke-width="0.5" opacity="0.75"/>`;
+    pts.forEach(([px,py])=>{svg+=`<circle cx="${px}" cy="${py}" r="4" fill="${col}" opacity="0.85"/>`;});
+    svg+=`<text x="${cx}" y="${cy+ry+14}" text-anchor="middle" font-size="11" font-weight="500" fill="${col}">${label}</text>`;
+  });
+
+  svg+=`<circle cx="204" cy="122" r="9" fill="none" stroke="#534AB7" stroke-width="1.5"/>`;
+  svg+=`<circle cx="204" cy="122" r="4" fill="#534AB7"/>`;
+  svg+=`<text x="204" y="108" text-anchor="middle" font-size="9" fill="#534AB7">z_t</text>`;
+
+  const midX=Math.round((185+358)/2),midY=Math.round(Math.min(128,74)/2+10);
+  svg+=`<path d="M185 ${128-34} Q${midX} ${midY} ${358} ${74+30}" fill="none" stroke="${TT}" stroke-width="0.8" stroke-dasharray="4 3"/>`;
+  svg+=`<text x="${midX}" y="${midY-12}" text-anchor="middle" font-size="9" fill="${TT}">interpolation = blend of behaviors</text>`;
+
+  svg+=`<text x="340" y="214" text-anchor="middle" font-size="11" fill="${TS}">Geometry encodes meaning. Neighbors in latent space behave similarly in the world.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 680 220">${svg}</svg>`;
+}
+
+function s4(el){
+  let svg=AR;
+
+  svg+=`<rect x="28" y="20" width="240" height="144" rx="6" fill="${dark?'#0e1e14':'#E1F5EE'}" stroke="#1D9E75" stroke-width="0.5"/>`;
+  svg+=`<text x="148" y="36" text-anchor="middle" font-size="11" font-weight="500" fill="#0F6E56">current latent z_t</text>`;
+  const lPts=[[88,72],[112,64],[132,80],[124,98],[96,104],[78,84],[108,58],[140,90]];
+  lPts.forEach(([px,py])=>{svg+=`<circle cx="${px}" cy="${py}" r="4" fill="#1D9E75" opacity="0.65"/>`;});
+  svg+=`<circle cx="120" cy="80" r="9" fill="none" stroke="#1D9E75" stroke-width="1.5"/>`;
+  svg+=`<circle cx="120" cy="80" r="4.5" fill="#1D9E75"/>`;
+
+  svg+=`<rect x="282" y="62" width="116" height="52" rx="6" fill="${dark?'#222':'#F1EFE8'}" stroke="#B4B2A9" stroke-width="0.5"/>`;
+  svg+=`<text x="340" y="82" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="500" fill="${dark?'#c2c0b6':'#3d3d3a'}">dynamics</text>`;
+  svg+=`<text x="340" y="100" text-anchor="middle" dominant-baseline="central" font-size="10" fill="${TT}">model</text>`;
+
+  svg+=`<rect x="412" y="20" width="240" height="144" rx="6" fill="${dark?'#12101e':'#EEEDFE'}" stroke="#534AB7" stroke-width="0.5"/>`;
+  svg+=`<text x="532" y="36" text-anchor="middle" font-size="11" font-weight="500" fill="#534AB7">predicted z_{t+k}</text>`;
+  const rPts=[[468,72],[492,62],[512,78],[504,96],[476,100],[454,82],[488,58],[524,88]];
+  rPts.forEach(([px,py])=>{svg+=`<circle cx="${px}" cy="${py}" r="4" fill="#534AB7" opacity="0.45"/>`;});
+  svg+=`<circle id="dst" cx="498" cy="80" r="9" fill="none" stroke="#534AB7" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+
+  svg+=`<line x1="270" y1="88" x2="280" y2="88" stroke="#1D9E75" stroke-width="1" marker-end="url(#ar)"/>`;
+  svg+=`<line x1="400" y1="88" x2="410" y2="88" stroke="#534AB7" stroke-width="1" marker-end="url(#ar)"/>`;
+
+  svg+=`<circle id="mvr" cx="120" cy="80" r="7" fill="#534AB7" opacity="0.9"/>`;
+
+  svg+=`<rect x="28" y="178" width="624" height="30" rx="4" fill="${dark?'#12101e':'#EEEDFE'}" stroke="#AFA9EC" stroke-width="0.5"/>`;
+  svg+=`<text x="340" y="193" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#534AB7">predicting in latent space: no pixel rendering, pure vector arithmetic</text>`;
+  svg+=`<text x="340" y="218" text-anchor="middle" font-size="11" fill="${TS}">The model imagines the future without generating a single pixel.</text>`;
+
+  el.innerHTML=`<svg width="100%" viewBox="0 0 680 228">${svg}</svg>`;
+
+  let progress=0;
+  const sx=120,sy=80,ex=498,ey=80;
+  const step=()=>{
+    progress+=0.022;
+    if(progress>1.35){progress=0;}
+    const t=Math.min(progress,1);
+    const bx=Math.round(sx+t*(ex-sx));
+    const by=Math.round(sy+t*(ey-sy));
+    const m=el.querySelector('#mvr');
+    if(m){m.setAttribute('cx',bx);m.setAttribute('cy',by);}
+    manim=setTimeout(step,28);
+  };
+  stopAnim();manim=setTimeout(step,500);
+}
+
+function s5(el){
+  const acts=[
+    {l:'Δ x',v:'+0.14 m',f:.82,c:'#1D9E75'},
+    {l:'Δ y',v:'−0.03 m',f:.18,c:'#1D9E75'},
+    {l:'Δ z',v:'+0.07 m',f:.42,c:'#1D9E75'},
+    {l:'Δ roll',v:'+0.01 rad',f:.06,c:'#7F77DD'},
+    {l:'Δ pitch',v:'−0.04 rad',f:.24,c:'#7F77DD'},
+    {l:'Δ yaw',v:'+0.02 rad',f:.12,c:'#7F77DD'},
+    {l:'gripper',v:'0.88 (open)',f:.88,c:'#D85A30'},
+  ];
+  const BH=110,GY=152,PAD=4;
+  const barStart=276;
+  const totalW=380;
+  const bw=(totalW-PAD*(acts.length+1))/acts.length;
+
+  let svg=AR;
+
+  const vw=26,vh=110,vy=22,vx=46;
+  const vCols=['#534AB7','#E86420','#1D9E75','#D85A30','#378ADD','#639922','#BA7517','#993C1D'];
+  const segOps=[0.9,0.5,0.3,0.7,0.6,0.8,0.4,0.65];
+  const segH=vh/8;
+  vCols.forEach((c,j)=>{
+    svg+=`<rect x="${vx}" y="${vy+j*segH}" width="${vw}" height="${segH-0.5}" fill="${c}" opacity="${segOps[j]}"/>`;
+  });
+  svg+=`<rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" rx="2" fill="none" stroke="#534AB7" stroke-width="1.2"/>`;
+  svg+=`<text x="${vx+vw/2}" y="${vy-8}" text-anchor="middle" font-size="10" font-weight="500" fill="#534AB7">z_{t+k}</text>`;
+
+  svg+=`<line x1="${vx+vw+4}" y1="${vy+vh/2}" x2="126" y2="${vy+vh/2}" stroke="#888780" stroke-width="1" marker-end="url(#ar)"/>`;
+  svg+=`<rect x="128" y="${vy+vh/2-24}" width="98" height="48" rx="6" fill="${dark?'#222':'#F1EFE8'}" stroke="#B4B2A9" stroke-width="0.5"/>`;
+  svg+=`<text x="177" y="${vy+vh/2-8}" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="500" fill="${dark?'#c2c0b6':'#3d3d3a'}">action</text>`;
+  svg+=`<text x="177" y="${vy+vh/2+10}" text-anchor="middle" dominant-baseline="central" font-size="10" fill="${TT}">decoder</text>`;
+  svg+=`<line x1="228" y1="${vy+vh/2}" x2="${barStart-4}" y2="${vy+vh/2}" stroke="#888780" stroke-width="1" marker-end="url(#ar)"/>`;
+
+  svg+=`<text x="${barStart+totalW/2}" y="14" text-anchor="middle" font-size="11" font-weight="500" fill="${dark?'#c2c0b6':'#3d3d3a'}">7-DoF action vector</text>`;
+
+  acts.forEach(({l,v,f,c},i)=>{
+    const h=f*BH;
+    const bx=barStart+PAD+i*(bw+PAD);
+    svg+=`<text x="${bx+bw/2}" y="${GY-BH-8}" text-anchor="middle" font-size="9.5" font-weight="500" fill="${c}">${l}</text>`;
+    svg+=`<rect x="${bx}" y="${GY-BH}" width="${bw}" height="${BH}" fill="${dark?'#2a2a2a':'#F1EFE8'}"/>`;
+    svg+=`<rect x="${bx}" y="${GY-h}" width="${bw}" height="${h}" fill="${c}" opacity="0.85"/>`;
+    svg+=`<text x="${bx+bw/2}" y="${GY+13}" text-anchor="middle" font-size="8" fill="${TT}">${v}</text>`;
+  });
+  svg+=`<line x1="${barStart}" y1="${GY}" x2="${barStart+totalW}" y2="${GY}" stroke="#C4C0B8" stroke-width="0.5"/>`;
+
+  svg+=`<text x="340" y="210" text-anchor="middle" font-size="11" fill="${TS}">Predicted future latent decodes directly to a motor command. No intermediate pixel generation.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 680 220">${svg}</svg>`;
+}
+
+vr();vstrt();
+</script>
+</body>
+</html>
