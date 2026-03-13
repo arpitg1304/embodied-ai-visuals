@@ -414,8 +414,8 @@
         <div class="hero-stat-label">Animations</div>
       </div>
       <div class="hero-stat">
-        <div class="hero-stat-num" id="stat-categories">0</div>
-        <div class="hero-stat-label">Categories</div>
+        <div class="hero-stat-num" id="stat-topics">0</div>
+        <div class="hero-stat-label">Topics</div>
       </div>
       <div class="hero-stat">
         <div class="hero-stat-num">100%</div>
@@ -530,7 +530,7 @@ const categories = [...new Set(ANIMATIONS.map(a => a.category))].sort();
 const tags = ['All', ...new Set(ANIMATIONS.map(a => a.tag))];
 
 document.getElementById('stat-count').textContent = ANIMATIONS.length;
-document.getElementById('stat-categories').textContent = categories.length;
+document.getElementById('stat-topics').textContent = tags.length - 1; // exclude 'All'
 
 /* ── Filter bar ── */
 let activeFilter = 'All';
