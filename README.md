@@ -6,18 +6,26 @@ Interactive animations explaining core concepts in robotics and embodied intelli
 
 ## Animations
 
-| Animation | Description |
-|-----------|-------------|
-| VLA Model Explainer | Step-by-step walkthrough of Vision-Language-Action models — from camera input to robot action output |
+| Animation | Category | Description |
+|-----------|----------|-------------|
+| VLA Model Explainer | Perception | Step-by-step walkthrough of Vision-Language-Action models — from camera input to robot action output |
+
+## Features
+
+- **No dependencies** — pure HTML/CSS/JS, zero build step
+- **Dark themed** — easy on the eyes
+- **Embeddable** — copy iframe embed code for any animation to use in your blog or slides
+- **Mobile friendly** — responsive layout that works on any device
+- **Auto-deploy** — push to `main` and GitHub Actions deploys to Pages
 
 ## Adding a new animation
 
-1. Drop a self-contained `.html` file into `animations/`
-2. Add an entry to the `ANIMATIONS` array in `index.html`:
-   ```js
-   { id: 'filename_without_extension', title: '...', description: '...', tag: '...' }
-   ```
-3. Push — the site updates automatically via GitHub Pages.
+1. Copy the template: `cp animations/_template.html animations/your_name.html`
+2. Build your animation using the CSS variable contract for consistent theming
+3. Register it in the `ANIMATIONS` array in `index.html`
+4. Push — the site updates automatically
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
 ## Local development
 
@@ -25,4 +33,8 @@ Interactive animations explaining core concepts in robotics and embodied intelli
 python3 -m http.server 8000
 ```
 
-Then open `http://localhost:8000`.
+Then open [http://localhost:8000](http://localhost:8000).
+
+## License
+
+[MIT](LICENSE)

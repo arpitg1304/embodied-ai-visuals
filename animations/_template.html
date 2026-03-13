@@ -1,0 +1,61 @@
+<!--
+  Animation Template — Embodied AI Visuals
+  ==========================================
+  Copy this file, rename it, and build your animation.
+
+  Guidelines:
+  - This file is loaded as an HTML fragment (no <html>, <head>, or <body> tags needed)
+  - Use CSS variables from the parent page for consistent theming:
+      --color-bg, --color-surface, --color-surface-hover,
+      --color-border, --color-border-secondary, --color-border-tertiary,
+      --color-text-primary, --color-text-secondary, --color-text-tertiary,
+      --color-accent, --color-accent-subtle, --color-background-secondary
+  - Keep everything self-contained in this single file (inline styles + inline scripts)
+  - SVG-based visuals work great and scale well
+  - Clean up intervals/timeouts if your animation uses them
+  - Test by opening index.html via a local server: python3 -m http.server 8000
+
+  After creating your animation:
+  1. Save it as animations/your_animation_name.html
+  2. Add an entry to the ANIMATIONS array in index.html
+  3. Optionally add a preview SVG to the PREVIEWS object in index.html
+-->
+
+<style>
+  .tmpl-container {
+    text-align: center;
+    padding: 20px 0;
+  }
+  .tmpl-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: 8px;
+  }
+  .tmpl-desc {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin-bottom: 20px;
+  }
+</style>
+
+<div class="tmpl-container">
+  <div class="tmpl-title">Your Animation Title</div>
+  <div class="tmpl-desc">A brief description of what this animation shows.</div>
+
+  <svg width="100%" viewBox="0 0 600 200">
+    <!-- Example: a simple animated circle -->
+    <circle cx="300" cy="100" r="40" fill="none" stroke="var(--color-accent)" stroke-width="2">
+      <animate attributeName="r" values="30;50;30" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <text x="300" y="105" text-anchor="middle" font-size="14" fill="var(--color-text-primary)">
+      Replace me
+    </text>
+  </svg>
+</div>
+
+<script>
+  // Your animation logic here
+  // Example: use requestAnimationFrame or setInterval for complex animations
+  console.log('Animation template loaded');
+</script>
