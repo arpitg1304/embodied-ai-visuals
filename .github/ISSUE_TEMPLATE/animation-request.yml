@@ -1,0 +1,59 @@
+name: Animation Request
+description: Suggest a new animation topic for Embodied AI Visuals
+title: "[Animation Request] "
+labels: ["animation-request"]
+body:
+  - type: input
+    id: topic
+    attributes:
+      label: Topic / Concept
+      description: What robotics or embodied AI concept should this animation explain?
+      placeholder: e.g. Diffusion Policy, Inverse Kinematics, SLAM
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Perception & Representation
+        - Planning & Control
+        - Learning & Adaptation
+        - Multi-Agent & Communication
+        - Safety & Deployment
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What should the animation show?
+      description: Describe the key steps or stages the animation should walk through.
+      placeholder: |
+        Step 1: Show the input (e.g. camera frame)
+        Step 2: Show the processing (e.g. encoder)
+        Step 3: Show the output (e.g. action)
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References (optional)
+      description: Papers, blog posts, or videos that explain this concept well.
+      placeholder: |
+        - Paper: https://arxiv.org/abs/...
+        - Blog: https://...
+
+  - type: dropdown
+    id: willing
+    attributes:
+      label: Would you be willing to implement this?
+      options:
+        - "Yes, I'd like to build it"
+        - "I can help but need guidance"
+        - "No, just suggesting"
+    validations:
+      required: true

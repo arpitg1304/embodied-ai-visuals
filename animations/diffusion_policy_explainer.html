@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diffusion Policy</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#1a1a1a;padding:24px 32px;margin:0}
+@media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#e8e6e0}}
+.vd{width:7px;height:7px;border-radius:50%;background:#ccc;cursor:pointer;border:none;padding:0;flex-shrink:0;transition:background .2s}
+.vd.on{background:#1a1a1a}
+@media(prefers-color-scheme:dark){.vd{background:#555}.vd.on{background:#1a1a1a}}
+.vb{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;border:0.5px solid #ccc;background:transparent;cursor:pointer;color:inherit;transition:background .15s}
+.vb:hover{background:#f0efea}
+@media(prefers-color-scheme:dark){.vb:hover{background:#2a2a2a}}
+#vtit{font-size:14px;font-weight:500}
+#vdsc{font-size:12px;color:#666;margin-top:3px;line-height:1.5}
+@media(prefers-color-scheme:dark){#vdsc{color:#aaa}}
+#vp-bar{height:2px;background:#eee;border-radius:1px;overflow:hidden;margin:12px 0 10px}
+@media(prefers-color-scheme:dark){#vp-bar{background:#333}}
+#vp{height:100%;width:0%;background:#1a1a1a}
+@media(prefers-color-scheme:dark){#vp{background:#e8e6e0}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes drift{0%{transform:translate(0,0)}25%{transform:translate(3px,-2px)}50%{transform:translate(-2px,3px)}75%{transform:translate(2px,2px)}100%{transform:translate(0,0)}}
+</style>
+</head>
+<body>
+<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px" id="vdots"></div>
+<div style="margin-bottom:14px">
+  <div id="vtit"></div>
+  <div id="vdsc"></div>
+</div>
+<div id="va" style="min-height:220px"></div>
+<div id="vp-bar"><div id="vp"></div></div>
+<div style="display:flex;align-items:center;justify-content:center;gap:10px">
+  <button class="vb" style="width:36px;height:36px;font-size:14px" onclick="vn(-1)">&#8592;</button>
+  <button class="vb" id="vplay" style="width:44px;height:44px;font-size:16px" onclick="vtg()">&#9646;&#9646;</button>
+  <button class="vb" style="width:36px;height:36px;font-size:14px" onclick="vn(1)">&#8594;</button>
+</div>
+<script>
+const dark=window.matchMedia('(prefers-color-scheme:dark)').matches;
+const TS=dark?'#aaa':'#555';
+const TT=dark?'#666':'#888';
+const CARD=dark?'#222':'#f8f8f6';
+const CARDB=dark?'#333':'#e8e6e0';
+let manim=null,manim2=null;
+function stopAnim(){
+  if(manim){clearTimeout(manim);manim=null;}
+  if(manim2){clearInterval(manim2);manim2=null;}
+}
+const AR=`<defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>`;
+
+const RNG=(seed=>()=>{seed=Math.imul(48271,seed)|0;return ((seed>>>0)/2**32);})(0x5f3759df);
+
+const VS=[
+  {t:'1 / 5 — The problem behavioral cloning cannot solve',
+   d:'When demonstrations show two valid paths around an obstacle, behavioral cloning averages them — predicting a trajectory straight through the wall. Diffusion policy handles multimodality naturally.',f:s1},
+  {t:'2 / 5 — Action space as a probability landscape',
+   d:'Instead of predicting one action, diffusion policy learns the full distribution of good actions. High-density regions are where expert demonstrations cluster.',f:s2},
+  {t:'3 / 5 — Forward process: adding noise',
+   d:'Training works by corrupting real action trajectories with Gaussian noise over T steps — until they become pure noise. The model learns to reverse this process.',f:s3},
+  {t:'4 / 5 — Reverse process: denoising toward action',
+   d:'At inference, the model starts from pure noise and iteratively removes it — guided by the observation — converging on a coherent robot action trajectory after ~50 steps.',f:s4},
+  {t:'5 / 5 — Why diffusion beats behavioral cloning',
+   d:'Diffusion policy samples from the full learned distribution. Multiple denoising runs from different noise seeds produce diverse but valid trajectories — never the averaged mean.',f:s5},
+];
+
+let vi=0,vplay=true,vpr=0,vtmr;
+const VDUR=5600,VTK=50;
+const dotsEl=document.getElementById('vdots');
+VS.forEach((_,i)=>{const d=document.createElement('button');d.className='vd';d.id='vd'+i;d.onclick=()=>vg(i);dotsEl.appendChild(d);});
+function vg(i){vi=i;vr();vrst();}
+function vn(d){vi=(vi+d+VS.length)%VS.length;vr();vrst();}
+function vr(){
+  stopAnim();
+  VS.forEach((_,i)=>document.getElementById('vd'+i).className='vd'+(i===vi?' on':''));
+  document.getElementById('vtit').textContent=VS[vi].t;
+  document.getElementById('vdsc').textContent=VS[vi].d;
+  const a=document.getElementById('va');a.style.animation='none';void a.offsetWidth;a.style.animation='fadeUp .3s ease';
+  a.innerHTML='';VS[vi].f(a);
+}
+function vrst(){clearInterval(vtmr);vpr=0;document.getElementById('vp').style.width='0%';if(vplay)vstrt();}
+function vstrt(){vtmr=setInterval(()=>{vpr+=100*VTK/VDUR;document.getElementById('vp').style.width=Math.min(vpr,100)+'%';if(vpr>=100){clearInterval(vtmr);vi=(vi+1)%VS.length;vr();vpr=0;document.getElementById('vp').style.width='0%';vstrt();}},VTK);}
+function vtg(){vplay=!vplay;document.getElementById('vplay').innerHTML=vplay?'&#9646;&#9646;':'&#9654;';if(vplay)vstrt();else clearInterval(vtmr);}
+
+function pathStr(pts){return pts.map((p,i)=>(i===0?'M':'L')+p[0]+' '+p[1]).join(' ');}
+
+function s1(el){
+  const W=680,H=220;
+  let svg=AR;
+
+  const wallX=310,wallY=60,wallH=100,wallW=14;
+  const startX=100,startY=110,goalX=560,goalY=110;
+
+  svg+=`<rect x="${wallX}" y="${wallY}" width="${wallW}" height="${wallH}" rx="2" fill="${dark?'#3a3a3a':'#D3D1C7'}" stroke="${dark?'#555':'#B4B2A9'}" stroke-width="0.5"/>`;
+  svg+=`<text x="${wallX+wallW/2}" y="${wallY-8}" text-anchor="middle" font-size="9" fill="${TT}">obstacle</text>`;
+
+  const demoTop=[[startX,startY],[180,startY],[240,startY-42],[310,startY-60],[380,startY-42],[440,startY],[560,startY]];
+  const demoBot=[[startX,startY],[180,startY],[240,startY+42],[310,startY+60],[380,startY+42],[440,startY],[560,startY]];
+  svg+=`<path d="${pathStr(demoTop)}" fill="none" stroke="#1D9E75" stroke-width="1.5" stroke-dasharray="5 3" opacity="0.8"/>`;
+  svg+=`<path d="${pathStr(demoBot)}" fill="none" stroke="#1D9E75" stroke-width="1.5" stroke-dasharray="5 3" opacity="0.8"/>`;
+  svg+=`<text x="200" y="${startY-58}" font-size="9" fill="#1D9E75">demo A</text>`;
+  svg+=`<text x="200" y="${startY+72}" font-size="9" fill="#1D9E75">demo B</text>`;
+
+  const bcPath=[[startX,startY],[180,startY],[240,startY],[wallX,startY],[wallX+wallW,startY],[440,startY],[goalX,startY]];
+  svg+=`<path d="${pathStr(bcPath)}" fill="none" stroke="#E24B4A" stroke-width="2" opacity="0.9"/>`;
+  svg+=`<text x="340" y="${startY-14}" text-anchor="middle" font-size="9" font-weight="500" fill="#A32D2D">BC average — through the wall</text>`;
+
+  svg+=`<circle cx="${startX}" cy="${startY}" r="9" fill="#534AB7"/>`;
+  svg+=`<text x="${startX}" y="${startY}" text-anchor="middle" dominant-baseline="central" font-size="8" fill="white">S</text>`;
+  svg+=`<rect x="${goalX-10}" y="${goalY-10}" width="20" height="20" rx="3" fill="#3B6D11"/>`;
+  svg+=`<text x="${goalX}" y="${goalY}" text-anchor="middle" dominant-baseline="central" font-size="10" fill="white">&#9733;</text>`;
+
+  svg+=`<text x="340" y="${H-8}" text-anchor="middle" font-size="11" fill="${TS}">Averaging multimodal demonstrations produces an invalid trajectory — collision guaranteed.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+}
+
+function s2(el){
+  const W=680,H=220;
+  let svg=AR;
+
+  const CX=240,CY=110,GW=360,GH=160;
+  const GX=CX-GW/2,GY=CY-GH/2;
+
+  const clusters=[
+    {cx:195,cy:88,rx:38,ry:28,fill:dark?'#0d2a1a':'#C0DD97',stroke:'#639922',label:'path A'},
+    {cx:195,cy:132,rx:38,ry:28,fill:dark?'#1a1a2e':'#CECBF6',stroke:'#7F77DD',label:'path B'},
+    {cx:280,cy:110,rx:22,ry:16,fill:dark?'#1a0d0d':'#F7C1C1',stroke:'#E24B4A',label:'BC mean',bad:true},
+  ];
+
+  for(let gx=GX;gx<=GX+GW;gx+=36) svg+=`<line x1="${gx}" y1="${GY}" x2="${gx}" y2="${GY+GH}" stroke="${dark?'#2a2a2a':'#F1EFE8'}" stroke-width="0.5"/>`;
+  for(let gy=GY;gy<=GY+GH;gy+=32) svg+=`<line x1="${GX}" y1="${gy}" x2="${GX+GW}" y2="${gy}" stroke="${dark?'#2a2a2a':'#F1EFE8'}" stroke-width="0.5"/>`;
+  svg+=`<rect x="${GX}" y="${GY}" width="${GW}" height="${GH}" fill="none" stroke="${dark?'#444':'#C4C0B8'}" stroke-width="0.5"/>`;
+  svg+=`<text x="${CX}" y="${GY-10}" text-anchor="middle" font-size="11" font-weight="500" fill="${TS}">action space</text>`;
+  svg+=`<text x="${GX}" y="${GY+GH+14}" font-size="9" fill="${TT}">Δx</text>`;
+  svg+=`<text x="${GX+GW}" y="${GY+GH+14}" text-anchor="end" font-size="9" fill="${TT}">Δy</text>`;
+
+  clusters.forEach(({cx,cy,rx,ry,fill,stroke,label,bad})=>{
+    svg+=`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${fill}" stroke="${stroke}" stroke-width="${bad?1.2:0.5}" stroke-dasharray="${bad?'4 3':''}"/>`;
+    svg+=`<text x="${cx}" y="${cy+ry+12}" text-anchor="middle" font-size="9" font-weight="${bad?'500':'400'}" fill="${bad?'#A32D2D':stroke}">${label}</text>`;
+  });
+
+  const dPts=[];
+  for(let i=0;i<28;i++){dPts.push([GX+20+RNG()*(GW-40),GY+10+RNG()*(GH-20)]);}
+  const cluster1=[[175,72],[185,80],[200,88],[210,96],[192,100],[178,92],[188,76],[204,108],[170,84],[196,82]];
+  const cluster2=[[175,118],[185,126],[200,134],[210,142],[192,146],[178,136],[188,120],[204,152],[170,128],[196,130]];
+
+  dPts.forEach(([px,py])=>{svg+=`<circle cx="${px}" cy="${py}" r="2.5" fill="${dark?'#444':'#C4C0B8'}" opacity="0.4"/>`;});
+  cluster1.forEach(([px,py])=>{svg+=`<circle cx="${px}" cy="${py}" r="3.5" fill="#639922" opacity="0.75"/>`;});
+  cluster2.forEach(([px,py])=>{svg+=`<circle cx="${px}" cy="${py}" r="3.5" fill="#7F77DD" opacity="0.75"/>`;});
+  svg+=`<circle cx="280" cy="110" r="5" fill="#E24B4A"/>`;
+  svg+=`<text x="280" y="110" text-anchor="middle" dominant-baseline="central" font-size="8" fill="white">✕</text>`;
+
+  const LX=460,LY=40;
+  svg+=`<text x="${LX+80}" y="${LY}" text-anchor="middle" font-size="11" font-weight="500" fill="${TS}">diffusion policy</text>`;
+
+  const dpSteps=[
+    {y:LY+20,label:'start: pure noise',col:dark?'#333':'#D3D1C7',op:1},
+    {y:LY+52,label:'step 10/50',col:'#AFA9EC',op:0.6},
+    {y:LY+84,label:'step 30/50',col:'#7F77DD',op:0.8},
+    {y:LY+116,label:'step 50/50 — action',col:'#534AB7',op:1},
+  ];
+  dpSteps.forEach(({y,label,col,op},i)=>{
+    svg+=`<rect x="${LX}" y="${y}" width="160" height="22" rx="4" fill="${col}" opacity="${op}"/>`;
+    svg+=`<text x="${LX+80}" y="${y+11}" text-anchor="middle" dominant-baseline="central" font-size="9" fill="${i===3?'#EEEDFE':TS}">${label}</text>`;
+    if(i<dpSteps.length-1){
+      svg+=`<line x1="${LX+80}" y1="${y+22}" x2="${LX+80}" y2="${y+31}" stroke="${dark?'#555':'#C4C0B8'}" stroke-width="1" marker-end="url(#ar)"/>`;
+    }
+  });
+
+  svg+=`<text x="340" y="${H-8}" text-anchor="middle" font-size="11" fill="${TS}">High-density regions = where expert demos cluster. Diffusion samples from these peaks.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+}
+
+function s3(el){
+  const W=680,H=228;
+  let svg=AR;
+
+  const cleanPath=[[60,114],[100,90],[140,80],[180,85],[220,100],[260,114]];
+  const steps=[0,0.25,0.55,0.85,1.0];
+  const labels=['x_0 (clean)','x_{T/4}','x_{T/2}','x_{3T/4}','x_T (noise)'];
+  const stepX=[60,182,304,426,548];
+  const BW=110,BY=30,BH=154;
+
+  steps.forEach((noise,si)=>{
+    const bx=stepX[si];
+    svg+=`<rect x="${bx}" y="${BY}" width="${BW}" height="${BH}" rx="3" fill="${dark?'#1e1e1e':'#F8F8F6'}" stroke="${dark?'#333':'#D3D1C7'}" stroke-width="0.5"/>`;
+
+    if(noise<0.05){
+      const pts=cleanPath.map(([px,py])=>[bx+(px-60),py]);
+      svg+=`<path d="${pathStr(pts)}" fill="none" stroke="#1D9E75" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+      pts.forEach(([px,py])=>{svg+=`<circle cx="${px}" cy="${py}" r="3.5" fill="#1D9E75"/>`;});
+    } else {
+      const nPts=[];
+      for(let i=0;i<Math.round(8+noise*18);i++){
+        const px=bx+12+RNG()*(BW-24);
+        const py=BY+14+RNG()*(BH-28);
+        const r=1.5+noise*2.5;
+        const op=0.3+noise*0.5;
+        nPts.push([px,py,r,op]);
+      }
+      const pathPts=cleanPath.map(([px,py])=>[bx+(px-60)+((RNG()-0.5)*noise*60),py+((RNG()-0.5)*noise*60)]);
+      svg+=`<path d="${pathStr(pathPts)}" fill="none" stroke="#1D9E75" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="${1-noise*0.8}"/>`;
+      nPts.forEach(([px,py,r,op])=>{svg+=`<circle cx="${px}" cy="${py}" r="${r.toFixed(1)}" fill="${dark?'#aaa':'#5F5E5A'}" opacity="${op.toFixed(2)}"/>`;});
+    }
+
+    svg+=`<text x="${bx+BW/2}" y="${BY+BH+14}" text-anchor="middle" font-size="9" fill="${si===0?'#0F6E56':si===4?'#5F5E5A':TT}">${labels[si]}</text>`;
+    if(si<steps.length-1){
+      const ax=bx+BW+4,ay=BY+BH/2;
+      svg+=`<line x1="${ax}" y1="${ay}" x2="${ax+12}" y2="${ay}" stroke="${dark?'#555':'#C4C0B8'}" stroke-width="1" marker-end="url(#ar)"/>`;
+      if(si===2){svg+=`<text x="${ax+6}" y="${ay-8}" text-anchor="middle" font-size="8" fill="${TT}">+noise</text>`;}
+    }
+  });
+
+  svg+=`<line x1="60" y1="${BY+BH+32}" x2="${548+BW}" y2="${BY+BH+32}" stroke="${dark?'#444':'#C4C0B8'}" stroke-width="0.5" marker-end="url(#ar)"/>`;
+  svg+=`<text x="340" y="${BY+BH+46}" text-anchor="middle" font-size="10" fill="${TT}">noise level t  →  T steps of corruption</text>`;
+
+  svg+=`<text x="340" y="${H-6}" text-anchor="middle" font-size="11" fill="${TS}">The network sees noisy trajectories at every level — and learns to predict the noise that was added.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+}
+
+function s4(el){
+  const W=680,H=228;
+  let svg=AR;
+
+  const NX=40,NY=20,NW=160,NH=160;
+  svg+=`<rect x="${NX}" y="${NY}" width="${NW}" height="${NH}" rx="6" fill="${dark?'#0e1018':'#EEEDFE'}" stroke="#AFA9EC" stroke-width="0.5"/>`;
+  svg+=`<text x="${NX+NW/2}" y="${NY+18}" text-anchor="middle" font-size="11" font-weight="500" fill="#534AB7">noise at t=T</text>`;
+  for(let i=0;i<22;i++){
+    const px=NX+12+RNG()*(NW-24);
+    const py=NY+28+RNG()*(NH-38);
+    svg+=`<circle cx="${px}" cy="${py}" r="${(1.8+RNG()*2.4).toFixed(1)}" fill="${dark?'#888':'#5F5E5A'}" opacity="${(0.25+RNG()*0.45).toFixed(2)}" style="animation:drift ${(2+RNG()*2).toFixed(1)}s ease-in-out infinite ${(RNG()*1.5).toFixed(1)}s"/>`;
+  }
+
+  const MX=248,MY=60,MW=136,MH=60;
+  svg+=`<rect x="${MX}" y="${MY}" width="${MW}" height="${MH}" rx="6" fill="${CARD}" stroke="${CARDB}" stroke-width="0.5"/>`;
+  svg+=`<text x="${MX+MW/2}" y="${MY+22}" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="500" fill="${dark?'#c2c0b6':'#3d3d3a'}">noise</text>`;
+  svg+=`<text x="${MX+MW/2}" y="${MY+40}" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="500" fill="${dark?'#c2c0b6':'#3d3d3a'}">predictor</text>`;
+
+  svg+=`<rect x="${MX-10}" y="${MY+MH+8}" width="${MW+20}" height="20" rx="3" fill="${dark?'#1a1a2e':'#EEEDFE'}" stroke="#AFA9EC" stroke-width="0.5"/>`;
+  svg+=`<text x="${MX+MW/2}" y="${MY+MH+18}" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#534AB7">conditioned on z_obs</text>`;
+
+  const AX=452,AY=20,AW=188,AH=160;
+  svg+=`<rect x="${AX}" y="${AY}" width="${AW}" height="${AH}" rx="6" fill="${dark?'#0a1a10':'#EAF3DE'}" stroke="#97C459" stroke-width="0.5"/>`;
+  svg+=`<text x="${AX+AW/2}" y="${AY+18}" text-anchor="middle" font-size="11" font-weight="500" fill="#3B6D11">action trajectory</text>`;
+
+  const tpath=[[AX+24,AY+AH-28],[AX+58,AY+AH-56],[AX+92,AY+AH-72],[AX+126,AY+AH-60],[AX+160,AY+AH-38]];
+  svg+=`<path d="${pathStr(tpath)}" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+  tpath.forEach(([px,py])=>{svg+=`<circle cx="${px}" cy="${py}" r="4" fill="#1D9E75"/>`;});
+
+  svg+=`<line x1="${NX+NW}" y1="${NY+NH/2}" x2="${MX-2}" y2="${MY+MH/2}" stroke="#888780" stroke-width="1" marker-end="url(#ar)"/>`;
+  svg+=`<line x1="${MX+MW}" y1="${MY+MH/2}" x2="${AX-2}" y2="${AY+AH/2}" stroke="#1D9E75" stroke-width="1" marker-end="url(#ar)"/>`;
+
+  const steps=50;
+  const stepsEl=[];
+  for(let i=0;i<steps;i++){
+    const x=NX+NW+8+i*(AX-NX-NW-18)/steps;
+    stepsEl.push(x);
+  }
+  svg+=`<g id="sline">`;
+  stepsEl.forEach((x,i)=>{
+    const prog=i/(steps-1);
+    const col=prog<0.5?`#888780`:`#1D9E75`;
+    const op=(0.2+prog*0.7).toFixed(2);
+    svg+=`<rect x="${x.toFixed(1)}" y="${MY+MH+36}" width="${((AX-NX-NW-18)/steps-1).toFixed(1)}" height="6" rx="1" fill="${col}" opacity="${op}"/>`;
+  });
+  svg+=`</g>`;
+  svg+=`<text x="${NX+NW+8}" y="${MY+MH+52}" font-size="9" fill="${TT}">t=T (noise)</text>`;
+  svg+=`<text x="${AX-2}" y="${MY+MH+52}" text-anchor="end" font-size="9" fill="#3B6D11">t=0 (action)</text>`;
+  svg+=`<text x="${(NX+NW+AX)/2}" y="${MY+MH+52}" text-anchor="middle" font-size="9" fill="${TT}">← 50 denoising steps</text>`;
+
+  svg+=`<text x="340" y="${H-6}" text-anchor="middle" font-size="11" fill="${TS}">Each denoising step removes a small amount of noise — guided by the current observation.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+
+  let step=0;
+  const prog=el.querySelector('#sline');
+  const rects=prog?prog.querySelectorAll('rect'):[];
+  const animate=()=>{
+    rects.forEach((r,i)=>{
+      const active=i===step%steps;
+      r.style.transform=active?'scaleY(2)':'scaleY(1)';
+      r.style.transformOrigin='center';
+    });
+    step++;
+    manim=setTimeout(animate,80);
+  };
+  stopAnim();manim=setTimeout(animate,600);
+}
+
+function s5(el){
+  const W=680,H=228;
+  let svg=AR;
+
+  const paths=[
+    {col:'#1D9E75',pts:[[60,130],[110,102],[160,90],[210,96],[260,110],[310,118]]},
+    {col:'#7F77DD',pts:[[60,130],[108,108],[155,116],[205,130],[255,122],[310,118]]},
+    {col:'#D85A30',pts:[[60,130],[112,96],[165,80],[215,88],[262,104],[310,118]]},
+  ];
+
+  const noiseSeeds=['seed A','seed B','seed C'];
+
+  paths.forEach(({col,pts},pi)=>{
+    svg+=`<path d="${pathStr(pts)}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>`;
+    pts.forEach(([px,py],i)=>{
+      if(i===0||i===pts.length-1) return;
+      svg+=`<circle cx="${px}" cy="${py}" r="3" fill="${col}" opacity="0.7"/>`;
+    });
+    svg+=`<text x="32" y="${pts[0][1]}" text-anchor="end" dominant-baseline="central" font-size="9" fill="${col}">${noiseSeeds[pi]}</text>`;
+  });
+
+  svg+=`<circle cx="60" cy="130" r="10" fill="#534AB7"/>`;
+  svg+=`<text x="60" y="130" text-anchor="middle" dominant-baseline="central" font-size="8" fill="white">z_t</text>`;
+
+  svg+=`<circle cx="310" cy="118" r="7" fill="${dark?'#1a3a20':'#C0DD97'}" stroke="#1D9E75" stroke-width="1"/>`;
+
+  const goalX=490,goalY=110;
+  svg+=`<rect x="${goalX-14}" y="${goalY-14}" width="28" height="28" rx="4" fill="#3B6D11"/>`;
+  svg+=`<text x="${goalX}" y="${goalY}" text-anchor="middle" dominant-baseline="central" font-size="14" fill="white">&#9733;</text>`;
+
+  const bcPts=[[60,130],[160,130],[260,130],[360,130]];
+  svg+=`<path d="${pathStr(bcPts)}" fill="none" stroke="#E24B4A" stroke-width="2" stroke-dasharray="6 3" opacity="0.6"/>`;
+  svg+=`<text x="190" y="148" text-anchor="middle" font-size="9" fill="#A32D2D">BC — one averaged path</text>`;
+
+  svg+=`<rect x="344" y="20" width="300" height="176" rx="6" fill="${CARD}" stroke="${CARDB}" stroke-width="0.5"/>`;
+  svg+=`<text x="494" y="38" text-anchor="middle" font-size="11" font-weight="500" fill="${dark?'#c2c0b6':'#3d3d3a'}">Why diffusion wins</text>`;
+
+  const pros=[
+    {col:'#1D9E75',txt:'handles multimodal demos'},
+    {col:'#7F77DD',txt:'diverse valid trajectories'},
+    {col:'#D85A30',txt:'never averages across modes'},
+    {col:'#378ADD',txt:'naturally smooth actions'},
+  ];
+  pros.forEach(({col,txt},i)=>{
+    svg+=`<circle cx="366" cy="${64+i*36}" r="5" fill="${col}"/>`;
+    svg+=`<text x="380" y="${64+i*36}" dominant-baseline="central" font-size="11" fill="${TS}">${txt}</text>`;
+  });
+
+  svg+=`<text x="340" y="${H-6}" text-anchor="middle" font-size="11" fill="${TS}">Same observation, different noise seeds → different valid plans. Diversity is a feature, not a bug.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+}
+
+vr();vstrt();
+</script>
+</body>
+</html>

@@ -453,7 +453,7 @@
 <div class="toast" id="toast"></div>
 
 <footer>
-  Built for learning &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals" target="_blank">View on GitHub</a> &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals/blob/main/CONTRIBUTING.md" target="_blank">Contribute</a>
+  Built for learning &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals" target="_blank">View on GitHub</a> &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals/blob/main/CONTRIBUTING.md" target="_blank">Contribute</a> &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals/issues/new?template=animation-request.yml" target="_blank">Request an animation</a>
 </footer>
 
 <script>
@@ -486,6 +486,13 @@ const ANIMATIONS = [
     description: 'How video-conditioned policies use temporal context and latent space predictions to generate robot actions without rendering pixels.',
     tag: 'VLA',
     category: 'Perception',
+  },
+  {
+    id: 'diffusion_policy_explainer',
+    title: 'Diffusion Policy',
+    description: 'How denoising diffusion iteratively refines random noise into smooth action trajectories — handling multimodal demonstrations that defeat behavioral cloning.',
+    tag: 'RL',
+    category: 'Learning',
   },
   // To add a new animation:
   // 1. Drop a .html file in animations/
@@ -545,6 +552,26 @@ const PREVIEWS = {
     <line x1="248" y1="70" x2="270" y2="70" stroke="#D85A30" stroke-width="1" stroke-dasharray="3 2"/>
     <text x="290" y="73" text-anchor="middle" font-size="9" fill="#D85A30">act</text>
     <text x="160" y="120" text-anchor="middle" font-size="9" fill="#8b949e">Latent Space Prediction</text>
+  </svg>`,
+  diffusion_policy_explainer: `<svg viewBox="0 0 320 140" fill="none">
+    <circle cx="60" cy="50" r="4" fill="#D85A30" opacity="0.3"/>
+    <circle cx="80" cy="65" r="3" fill="#D85A30" opacity="0.3"/>
+    <circle cx="45" cy="70" r="3.5" fill="#D85A30" opacity="0.3"/>
+    <circle cx="70" cy="40" r="3" fill="#D85A30" opacity="0.3"/>
+    <circle cx="55" cy="80" r="4" fill="#D85A30" opacity="0.3"/>
+    <text x="63" y="105" text-anchor="middle" font-size="8" fill="#8b949e">noise</text>
+    <line x1="100" y1="60" x2="130" y2="60" stroke="#6e7681" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="115" y="52" text-anchor="middle" font-size="7" fill="#6e7681">denoise</text>
+    <circle cx="160" cy="50" r="3" fill="#534AB7" opacity="0.5"/>
+    <circle cx="170" cy="60" r="3" fill="#534AB7" opacity="0.5"/>
+    <circle cx="155" cy="65" r="3" fill="#534AB7" opacity="0.5"/>
+    <circle cx="165" cy="45" r="3" fill="#534AB7" opacity="0.5"/>
+    <line x1="190" y1="60" x2="220" y2="60" stroke="#6e7681" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="205" y="52" text-anchor="middle" font-size="7" fill="#6e7681">refine</text>
+    <path d="M240 80 Q255 40 280 35 Q295 32 300 50" fill="none" stroke="#1D9E75" stroke-width="2"/>
+    <circle cx="300" cy="50" r="3" fill="#1D9E75"/>
+    <text x="270" y="105" text-anchor="middle" font-size="8" fill="#8b949e">trajectory</text>
+    <text x="160" y="130" text-anchor="middle" font-size="9" fill="#8b949e">Noise to Action</text>
   </svg>`,
 };
 
@@ -630,23 +657,60 @@ function openViewer(anim) {
   currentAnim = anim;
   document.getElementById('viewer-title').textContent = anim.title;
   const content = document.getElementById('viewer-content');
-  // Use an iframe so each load gets a fresh JS execution context
   content.innerHTML = `<iframe src="animations/${anim.id}.html"></iframe>`;
   document.getElementById('viewer').classList.add('active');
   document.body.style.overflow = 'hidden';
+  // Update URL without reload
+  history.pushState({ anim: anim.id }, '', `?anim=${anim.id}`);
 }
 
 function closeViewer() {
   document.getElementById('viewer').classList.remove('active');
   document.body.style.overflow = '';
-  // Remove the iframe to stop animations and free memory
   document.getElementById('viewer-content').innerHTML = '';
   currentAnim = null;
+  history.pushState({}, '', location.pathname);
 }
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeViewer();
 });
+
+// Handle back/forward navigation
+window.addEventListener('popstate', (e) => {
+  if (e.state && e.state.anim) {
+    const anim = ANIMATIONS.find(a => a.id === e.state.anim);
+    if (anim) { currentAnim = anim; openViewerDirect(anim); }
+  } else {
+    closeViewerSilent();
+  }
+});
+
+function openViewerDirect(anim) {
+  currentAnim = anim;
+  document.getElementById('viewer-title').textContent = anim.title;
+  const content = document.getElementById('viewer-content');
+  content.innerHTML = `<iframe src="animations/${anim.id}.html"></iframe>`;
+  document.getElementById('viewer').classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeViewerSilent() {
+  document.getElementById('viewer').classList.remove('active');
+  document.body.style.overflow = '';
+  document.getElementById('viewer-content').innerHTML = '';
+  currentAnim = null;
+}
+
+// Auto-open from URL on page load
+(function() {
+  const params = new URLSearchParams(location.search);
+  const animId = params.get('anim');
+  if (animId) {
+    const anim = ANIMATIONS.find(a => a.id === animId);
+    if (anim) openViewerDirect(anim);
+  }
+})();
 
 /* ── Embed copy ── */
 function getEmbedCode(id) {

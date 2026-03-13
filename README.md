@@ -12,6 +12,7 @@ Interactive animations explaining core concepts in robotics and embodied intelli
 | Sim-to-Real Gap Explainer | Learning | Why sim-trained policies fail in the real world and how domain randomization bridges the gap |
 | Reward Shaping — Sparse vs Dense | Learning | How reward function design shapes learning — sparse rewards, dense gradients, and potential-based shaping |
 | Video Action Models & Latent Space | Perception | How video-conditioned policies use temporal context and latent space predictions to generate robot actions |
+| Diffusion Policy | Learning | How denoising diffusion refines random noise into smooth action trajectories, handling multimodal demonstrations |
 
 ## Features
 
@@ -38,7 +39,7 @@ Planned animations, roughly ordered by pedagogical flow. Contributions welcome!
 
 ### Learning & Adaptation
 - [ ] **Imitation Learning Pipeline** — Human demo → trajectory encoding → policy distillation. Show how a few demonstrations become a generalizable skill
-- [ ] **Diffusion Policy** — Denoising process that iteratively refines random noise into a smooth action trajectory — the key insight behind diffusion-based robot control
+- [x] **Diffusion Policy** — Denoising process that iteratively refines random noise into a smooth action trajectory — the key insight behind diffusion-based robot control
 - [ ] **Hindsight Experience Replay** — Failed trajectories relabeled with achieved goals — turning failures into training signal
 - [ ] **Curriculum Learning for Manipulation** — Progressively harder tasks: reach → touch → grasp → lift → stack
 
