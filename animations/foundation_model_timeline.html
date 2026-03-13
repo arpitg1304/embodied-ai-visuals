@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Robot Foundation Models — Timeline</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#e6edf3;overflow-x:hidden}
+
+.timeline-header{text-align:center;padding:40px 24px 20px}
+.timeline-header h1{font-size:28px;font-weight:700;letter-spacing:-0.5px;background:linear-gradient(135deg,#e6edf3,#58a6ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px}
+.timeline-header p{color:#8b949e;font-size:15px;max-width:520px;margin:0 auto}
+
+.legend{display:flex;justify-content:center;gap:16px;padding:16px 24px 8px;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:#8b949e}
+.legend-dot{width:10px;height:10px;border-radius:50%}
+
+.timeline-wrap{position:relative;overflow-x:auto;overflow-y:visible;padding:40px 60px 60px;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#30363d #0d1117}
+.timeline-wrap::-webkit-scrollbar{height:6px}
+.timeline-wrap::-webkit-scrollbar-track{background:#0d1117}
+.timeline-wrap::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+
+.timeline{position:relative;display:flex;align-items:flex-start;min-width:max-content;padding-bottom:20px}
+
+.year-section{position:relative;display:flex;flex-direction:column;align-items:flex-start}
+.year-label{font-size:13px;font-weight:700;color:#58a6ff;margin-bottom:16px;padding-left:8px;letter-spacing:0.5px}
+
+.year-models{display:flex;gap:0;position:relative}
+
+/* The main spine line */
+.spine{position:absolute;top:62px;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#30363d 60px,#30363d calc(100% - 60px),transparent)}
+
+.model-node{position:relative;display:flex;flex-direction:column;align-items:center;width:120px;flex-shrink:0;cursor:pointer;text-decoration:none}
+
+.node-dot{width:16px;height:16px;border-radius:50%;border:2px solid #0d1117;position:relative;z-index:2;transition:transform 0.2s,box-shadow 0.2s;margin-top:54px}
+.node-dot::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid transparent;transition:border-color 0.3s}
+
+.model-node:hover .node-dot{transform:scale(1.4);box-shadow:0 0 16px var(--node-color,#58a6ff)}
+.model-node:hover .node-dot::after{border-color:var(--node-color,#58a6ff)}
+
+.node-stem{width:2px;height:20px;background:#30363d;margin-top:-1px;position:relative;z-index:1}
+.model-node:nth-child(even) .node-stem{height:40px}
+
+.node-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 12px;width:110px;text-align:center;transition:all 0.2s;margin-top:4px}
+.model-node:hover .node-card{border-color:var(--node-color,#58a6ff);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.4)}
+
+.node-name{font-size:12px;font-weight:600;color:#e6edf3;line-height:1.3;margin-bottom:4px}
+.node-desc{font-size:10px;color:#8b949e;line-height:1.4}
+.node-year-tag{font-size:9px;color:#6e7681;margin-top:4px}
+
+/* Has animation indicator */
+.model-node.has-anim .node-card{border-color:#1D9E75}
+.model-node.has-anim .node-card::after{content:'▶ has animation';display:block;font-size:9px;color:#1D9E75;margin-top:6px;font-weight:500}
+
+/* Category colors */
+.cat-perception .node-dot{background:#58a6ff;--node-color:#58a6ff}
+.cat-learning .node-dot{background:#D85A30;--node-color:#D85A30}
+.cat-planning .node-dot{background:#1D9E75;--node-color:#1D9E75}
+.cat-generalist .node-dot{background:#A371F7;--node-color:#A371F7}
+.cat-foundation .node-dot{background:#E3B341;--node-color:#E3B341}
+
+/* Pulse animation for nodes with animations */
+.model-node.has-anim .node-dot{animation:pulse-glow 2s ease-in-out infinite}
+@keyframes pulse-glow{
+  0%,100%{box-shadow:0 0 4px var(--node-color)}
+  50%{box-shadow:0 0 14px var(--node-color)}
+}
+
+/* Entrance animation */
+.model-node{opacity:0;transform:translateY(20px);animation:fade-up 0.5s ease forwards}
+@keyframes fade-up{to{opacity:1;transform:translateY(0)}}
+
+/* Scroll hint */
+.scroll-hint{text-align:center;padding:0 24px 24px;color:#6e7681;font-size:12px;animation:hint-fade 3s ease forwards}
+@keyframes hint-fade{0%,70%{opacity:1}100%{opacity:0}}
+
+/* Tooltip */
+.tooltip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1c2333;border:1px solid #30363d;border-radius:6px;padding:8px 12px;width:180px;z-index:10;pointer-events:none}
+.model-node:hover .tooltip{display:block}
+.tooltip-title{font-size:12px;font-weight:600;margin-bottom:4px;color:#e6edf3}
+.tooltip-desc{font-size:11px;color:#8b949e;line-height:1.4}
+
+@media(max-width:640px){
+  .timeline-wrap{padding:30px 20px 50px}
+  .model-node{width:100px}
+  .node-card{width:90px;padding:8px}
+  .node-name{font-size:11px}
+  .node-desc{font-size:9px}
+  .timeline-header h1{font-size:22px}
+}
+</style>
+</head>
+<body>
+
+<div class="timeline-header">
+  <h1>The Evolution of Robot Foundation Models</h1>
+  <p>From sim-to-real transfer to generalist robot policies — the key milestones shaping embodied AI.</p>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div> Perception</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#D85A30"></div> Learning</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#1D9E75"></div> Planning</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#A371F7"></div> Generalist</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E3B341"></div> Foundation</div>
+</div>
+
+<div class="scroll-hint">← scroll horizontally to explore →</div>
+
+<div class="timeline-wrap" id="timeline-wrap">
+  <div class="spine" id="spine"></div>
+  <div class="timeline" id="timeline"></div>
+</div>
+
+<script>
+const MODELS = [
+  { year: 2017, name: 'Domain Randomization', desc: 'Sim-to-real via randomized rendering', cat: 'learning', paper: 'https://arxiv.org/abs/1703.06907', anim: 'sim2real_gap_explainer' },
+  { year: 2021, name: 'CLIPort', desc: 'CLIP + Transporter for language-conditioned manipulation', cat: 'perception', paper: 'https://arxiv.org/abs/2109.12098' },
+  { year: 2022, name: 'BC-Z', desc: 'Zero-shot task generalization via imitation', cat: 'learning', paper: 'https://arxiv.org/abs/2202.02005' },
+  { year: 2022, name: 'SayCan', desc: 'LLM grounded in robotic affordances', cat: 'planning', paper: 'https://arxiv.org/abs/2204.01691' },
+  { year: 2022, name: 'Gato', desc: 'Generalist agent across 604 tasks', cat: 'generalist', paper: 'https://arxiv.org/abs/2205.06175' },
+  { year: 2022, name: 'Inner Monologue', desc: 'LLM embodied reasoning with feedback', cat: 'planning', paper: 'https://arxiv.org/abs/2207.05608' },
+  { year: 2022, name: 'PerAct', desc: '3D manipulation via Perceiver transformer', cat: 'perception', paper: 'https://arxiv.org/abs/2209.05451' },
+  { year: 2022, name: 'RT-1', desc: 'Large-scale real-world robotics transformer', cat: 'foundation', paper: 'https://arxiv.org/abs/2212.06817' },
+  { year: 2023, name: 'UniPi', desc: 'Policies via text-guided video generation', cat: 'learning', paper: 'https://arxiv.org/abs/2302.00111' },
+  { year: 2023, name: 'Diffusion Policy', desc: 'Actions via conditional denoising diffusion', cat: 'learning', paper: 'https://arxiv.org/abs/2303.04137', anim: 'diffusion_policy_explainer' },
+  { year: 2023, name: 'RT-2', desc: 'VLA from web-scale pretraining', cat: 'foundation', paper: 'https://arxiv.org/abs/2307.15818', anim: 'vla_model_explainer' },
+  { year: 2023, name: 'RoboCat', desc: 'Self-improving multi-embodiment agent', cat: 'generalist', paper: 'https://arxiv.org/abs/2306.11706' },
+  { year: 2023, name: 'Open X-Embodiment', desc: 'Cross-embodiment dataset from 22 robots', cat: 'foundation', paper: 'https://arxiv.org/abs/2310.08864' },
+  { year: 2023, name: 'SuSIE', desc: 'Subgoal synthesis via image-editing diffusion', cat: 'learning', paper: 'https://arxiv.org/abs/2310.10639' },
+  { year: 2024, name: 'Octo', desc: 'Open-source generalist on 800k trajectories', cat: 'foundation', paper: 'https://arxiv.org/abs/2405.12213' },
+  { year: 2024, name: 'OpenVLA', desc: 'Open-source 7B vision-language-action model', cat: 'foundation', paper: 'https://arxiv.org/abs/2406.09246' },
+  { year: 2024, name: 'GR00T', desc: 'NVIDIA foundation model for humanoid robots', cat: 'foundation', paper: null },
+  { year: 2024, name: 'π0', desc: 'Flow matching for dexterous robot control', cat: 'learning', paper: 'https://arxiv.org/abs/2410.24164', anim: 'flow_matching_explainer' },
+  { year: 2025, name: 'UniAct', desc: 'Universal action space for cross-embodiment', cat: 'foundation', paper: 'https://arxiv.org/abs/2501.10105' },
+  { year: 2025, name: 'GR00T N1', desc: 'Open foundation model for humanoid robots', cat: 'generalist', paper: 'https://arxiv.org/abs/2503.14734' },
+  { year: 2025, name: 'Gemini Robotics', desc: 'Gemini-based VLA for physical world', cat: 'foundation', paper: 'https://arxiv.org/abs/2503.20020' },
+  { year: 2025, name: 'Helix', desc: 'Dual-system VLA for humanoid control', cat: 'generalist', paper: 'https://www.figure.ai/news/helix' },
+  { year: 2025, name: 'π0.5', desc: 'VLA with open-world generalization', cat: 'foundation', paper: 'https://arxiv.org/abs/2504.16054' },
+  { year: 2026, name: 'Cosmos Policy', desc: 'NVIDIA world-model-driven robot policy', cat: 'foundation', paper: 'https://arxiv.org/abs/2601.16163' },
+  { year: 2026, name: 'π0.6', desc: 'Next-gen flow matching robot control', cat: 'foundation', paper: 'https://www.pi.website/blog/pistar06' },
+];
+
+const timeline = document.getElementById('timeline');
+const wrap = document.getElementById('timeline-wrap');
+
+// Group by year
+const years = [...new Set(MODELS.map(m => m.year))].sort();
+
+let nodeIndex = 0;
+years.forEach(year => {
+  const section = document.createElement('div');
+  section.className = 'year-section';
+
+  const label = document.createElement('div');
+  label.className = 'year-label';
+  label.textContent = year;
+  section.appendChild(label);
+
+  const models = document.createElement('div');
+  models.className = 'year-models';
+
+  MODELS.filter(m => m.year === year).forEach(m => {
+    const node = document.createElement('a');
+    node.className = `model-node cat-${m.cat}${m.anim ? ' has-anim' : ''}`;
+    if (m.anim) {
+      node.href = '#';
+      node.onclick = (e) => {
+        e.preventDefault();
+        // Tell parent page to open this animation
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: 'open-anim', id: m.anim }, '*');
+        } else {
+          window.location.href = `/?anim=${m.anim}`;
+        }
+      };
+    } else {
+      node.href = m.paper || '#';
+      node.target = '_blank';
+    }
+    node.rel = 'noopener';
+    node.style.animationDelay = `${nodeIndex * 0.08}s`;
+    nodeIndex++;
+
+    node.innerHTML = `
+      <div class="tooltip">
+        <div class="tooltip-title">${m.name} (${m.year})</div>
+        <div class="tooltip-desc">${m.desc}</div>
+      </div>
+      <div class="node-dot"></div>
+      <div class="node-stem"></div>
+      <div class="node-card">
+        <div class="node-name">${m.name}</div>
+        <div class="node-desc">${m.desc}</div>
+      </div>
+    `;
+
+    models.appendChild(node);
+  });
+
+  section.appendChild(models);
+  timeline.appendChild(section);
+});
+
+// Auto-scroll to middle on load
+setTimeout(() => {
+  wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) * 0.3;
+}, 100);
+</script>
+</body>
+</html>

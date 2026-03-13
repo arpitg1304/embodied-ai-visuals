@@ -427,6 +427,52 @@
   footer a { color: var(--color-accent); text-decoration: none; }
   footer a:hover { text-decoration: underline; }
 
+  /* ── Timeline section ── */
+  .timeline-section {
+    border-bottom: 1px solid var(--color-border);
+    padding: 32px 24px 24px;
+  }
+
+  .timeline-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 960px;
+    margin: 0 auto 16px;
+  }
+
+  .timeline-section-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .timeline-section-header a {
+    font-size: 13px;
+    color: var(--color-accent);
+    text-decoration: none;
+  }
+
+  .timeline-section-header a:hover {
+    text-decoration: underline;
+  }
+
+  .timeline-iframe-wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #0d1117;
+  }
+
+  .timeline-iframe-wrap iframe {
+    display: block;
+    width: 100%;
+    height: 420px;
+    border: none;
+  }
+
   /* ── Responsive ── */
   @media (max-width: 640px) {
     .hero { padding: 40px 16px 36px; }
@@ -438,6 +484,9 @@
     .viewer-nav { padding: 8px 10px; font-size: 18px; }
     .viewer-nav.prev { left: 4px; }
     .viewer-nav.next { right: 4px; }
+    .timeline-section { padding: 24px 16px 20px; }
+    .timeline-iframe-wrap iframe { height: 360px; }
+    .timeline-section-header h2 { font-size: 16px; }
     .filter-bar { padding: 16px 16px 0; }
     main { padding: 16px 16px 40px; }
   }
@@ -467,6 +516,17 @@
     </div>
   </div>
 </header>
+
+<!-- Timeline section -->
+<section class="timeline-section">
+  <div class="timeline-section-header">
+    <h2>The Evolution of Robot Foundation Models</h2>
+    <a href="?anim=foundation_model_timeline" onclick="event.preventDefault();openViewer({id:'foundation_model_timeline',title:'The Evolution of Robot Foundation Models'})">Open fullscreen &rarr;</a>
+  </div>
+  <div class="timeline-iframe-wrap">
+    <iframe src="animations/foundation_model_timeline.html" loading="lazy" title="Robot Foundation Models Timeline"></iframe>
+  </div>
+</section>
 
 <!-- Filter bar -->
 <div class="filter-bar" id="filter-bar">
@@ -765,7 +825,7 @@ document.addEventListener('keydown', e => {
 // Handle back/forward navigation
 window.addEventListener('popstate', (e) => {
   if (e.state && e.state.anim) {
-    const anim = ANIMATIONS.find(a => a.id === e.state.anim);
+    const anim = findAnim(e.state.anim);
     if (anim) { currentAnim = anim; openViewerDirect(anim); }
   } else {
     closeViewerSilent();
@@ -788,15 +848,32 @@ function closeViewerSilent() {
   currentAnim = null;
 }
 
+// Special animations (not shown in gallery cards)
+const SPECIAL_ANIMS = [
+  { id: 'foundation_model_timeline', title: 'The Evolution of Robot Foundation Models' },
+];
+
+function findAnim(id) {
+  return ANIMATIONS.find(a => a.id === id) || SPECIAL_ANIMS.find(a => a.id === id);
+}
+
 // Auto-open from URL on page load
 (function() {
   const params = new URLSearchParams(location.search);
   const animId = params.get('anim');
   if (animId) {
-    const anim = ANIMATIONS.find(a => a.id === animId);
+    const anim = findAnim(animId);
     if (anim) openViewerDirect(anim);
   }
 })();
+
+// Listen for messages from timeline iframe
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'open-anim') {
+    const anim = findAnim(e.data.id);
+    if (anim) openViewer(anim);
+  }
+});
 
 /* ── Embed copy ── */
 function getEmbedCode(id) {
