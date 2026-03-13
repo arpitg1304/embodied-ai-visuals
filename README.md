@@ -4,6 +4,8 @@ Interactive animations explaining core concepts in robotics and embodied intelli
 
 **Live site:** [arpitg1304.github.io/embodied-ai-visuals](https://arpitg1304.github.io/embodied-ai-visuals/)
 
+[![Landing Page](docs/landing_page.png)](https://arpitg1304.github.io/embodied-ai-visuals/)
+
 ## Animations
 
 | Animation | Category | Description |
