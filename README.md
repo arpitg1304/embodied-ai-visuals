@@ -13,6 +13,7 @@ Interactive animations explaining core concepts in robotics and embodied intelli
 | Reward Shaping — Sparse vs Dense | Learning | How reward function design shapes learning — sparse rewards, dense gradients, and potential-based shaping |
 | Video Action Models & Latent Space | Learning | How video-conditioned policies use temporal context and latent space predictions to generate robot actions |
 | Diffusion Policy | Learning | How denoising diffusion refines random noise into smooth action trajectories, handling multimodal demonstrations |
+| Flow Matching | Learning | How flow matching learns straight-line velocity fields to transport noise into action distributions — a faster, simpler alternative to diffusion |
 
 ## Features
 

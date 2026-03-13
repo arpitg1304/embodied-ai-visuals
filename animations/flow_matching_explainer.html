@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flow Matching</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#1a1a1a;padding:24px 32px;margin:0}
+@media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#e8e6e0}}
+.vd{width:7px;height:7px;border-radius:50%;background:#ccc;cursor:pointer;border:none;padding:0;flex-shrink:0;transition:background .2s}
+.vd.on{background:#1a1a1a}
+@media(prefers-color-scheme:dark){.vd{background:#555}.vd.on{background:#e8e6e0}}
+.vb{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;border:0.5px solid #ccc;background:transparent;cursor:pointer;color:inherit;transition:background .15s}
+.vb:hover{background:#f0efea}
+@media(prefers-color-scheme:dark){.vb:hover{background:#2a2a2a}}
+#vtit{font-size:14px;font-weight:500}
+#vdsc{font-size:12px;color:#666;margin-top:3px;line-height:1.5}
+@media(prefers-color-scheme:dark){#vdsc{color:#aaa}}
+#vp-bar{height:2px;background:#eee;border-radius:1px;overflow:hidden;margin:12px 0 10px}
+@media(prefers-color-scheme:dark){#vp-bar{background:#333}}
+#vp{height:100%;width:0%;background:#1a1a1a}
+@media(prefers-color-scheme:dark){#vp{background:#e8e6e0}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes flow{0%{stroke-dashoffset:20}100%{stroke-dashoffset:0}}
+@keyframes pulse{0%,100%{opacity:.15}60%{opacity:.7}}
+</style>
+</head>
+<body>
+<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px" id="vdots"></div>
+<div style="margin-bottom:14px">
+  <div id="vtit"></div>
+  <div id="vdsc"></div>
+</div>
+<div id="va" style="min-height:230px"></div>
+<div id="vp-bar"><div id="vp"></div></div>
+<div style="display:flex;align-items:center;justify-content:center;gap:10px">
+  <button class="vb" style="width:36px;height:36px;font-size:14px" onclick="vn(-1)">&#8592;</button>
+  <button class="vb" id="vplay" style="width:44px;height:44px;font-size:16px" onclick="vtg()">&#9646;&#9646;</button>
+  <button class="vb" style="width:36px;height:36px;font-size:14px" onclick="vn(1)">&#8594;</button>
+</div>
+<script>
+const dark=window.matchMedia('(prefers-color-scheme:dark)').matches;
+const TS=dark?'#aaa':'#555';
+const TT=dark?'#555':'#999';
+const CARD=dark?'#222':'#f6f5f2';
+const CARDB=dark?'#333':'#ddd';
+let manim=null;
+function stopAnim(){if(manim){clearInterval(manim);clearTimeout(manim);manim=null;}}
+const AR=`<defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="ar2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>`;
+
+const RNG=(seed=>()=>{seed=Math.imul(48271,seed)|0;return((seed>>>0)/2**32);})(0xdeadbeef);
+
+const VS=[
+  {t:'1 / 5 — The core idea: straight paths',
+   d:'Flow matching learns a vector field that transports samples from a simple source distribution (Gaussian noise) to the data distribution along straight, deterministic paths — no curved stochastic walks.',f:s1},
+  {t:'2 / 5 — Diffusion vs flow matching',
+   d:'Diffusion takes curved, stochastic paths requiring ~50 denoising steps. Flow matching uses straight conditional flows — the same transport quality in as few as 10 ODE integration steps.',f:s2},
+  {t:'3 / 5 — Training: interpolate and regress',
+   d:'At training time: sample a noise point x_0 and a data point x_1, interpolate between them at random time t, and train the network to predict the straight-line velocity (x_1 − x_0) at that point.',f:s3},
+  {t:'4 / 5 — The learned vector field',
+   d:'After training, every point in space has an associated velocity vector pointing toward the data distribution. At inference, a particle follows these arrows from noise to action in a few steps.',f:s4},
+  {t:'5 / 5 — Why robotics uses flow matching',
+   d:'π0 and other leading robot policies use flow matching because straight paths need fewer solver steps, enabling real-time 50Hz control. Fewer steps = lower latency = faster robot reactions.',f:s5},
+];
+
+let vi=0,vplay=true,vpr=0,vtmr;
+const VDUR=5600,VTK=50;
+const dotsEl=document.getElementById('vdots');
+VS.forEach((_,i)=>{const d=document.createElement('button');d.className='vd';d.id='vd'+i;d.onclick=()=>vg(i);dotsEl.appendChild(d);});
+function vg(i){vi=i;vr();vrst();}
+function vn(d){vi=(vi+d+VS.length)%VS.length;vr();vrst();}
+function vr(){
+  stopAnim();
+  VS.forEach((_,i)=>document.getElementById('vd'+i).className='vd'+(i===vi?' on':''));
+  document.getElementById('vtit').textContent=VS[vi].t;
+  document.getElementById('vdsc').textContent=VS[vi].d;
+  const a=document.getElementById('va');a.style.animation='none';void a.offsetWidth;a.style.animation='fadeUp .3s ease';
+  a.innerHTML='';VS[vi].f(a);
+}
+function vrst(){clearInterval(vtmr);vpr=0;document.getElementById('vp').style.width='0%';if(vplay)vstrt();}
+function vstrt(){vtmr=setInterval(()=>{vpr+=100*VTK/VDUR;document.getElementById('vp').style.width=Math.min(vpr,100)+'%';if(vpr>=100){clearInterval(vtmr);vi=(vi+1)%VS.length;vr();vpr=0;document.getElementById('vp').style.width='0%';vstrt();}},VTK);}
+function vtg(){vplay=!vplay;document.getElementById('vplay').innerHTML=vplay?'&#9646;&#9646;':'&#9654;';if(vplay)vstrt();else clearInterval(vtmr);}
+
+function grid(x0,y0,w,h){
+  let g='';
+  for(let x=x0;x<=x0+w;x+=38) g+=`<line x1="${x}" y1="${y0}" x2="${x}" y2="${y0+h}" stroke="${dark?'#2a2a2a':'#f0eeea'}" stroke-width="0.5"/>`;
+  for(let y=y0;y<=y0+h;y+=34) g+=`<line x1="${x0}" y1="${y}" x2="${x0+w}" y2="${y}" stroke="${dark?'#2a2a2a':'#f0eeea'}" stroke-width="0.5"/>`;
+  return g;
+}
+
+function s1(el){
+  const W=680,H=230;
+  let svg=AR+grid(30,18,300,178);
+
+  const noisePts=[[68,154],[56,108],[82,68],[108,128],[92,92],[72,140],[60,80],[96,114],[80,54],[110,96]];
+  const dataPts=[[258,154],[246,108],[272,68],[298,128],[282,92],[262,140],[250,80],[286,114],[270,54],[300,96]];
+  const pairs=noisePts.map((n,i)=>[n,dataPts[i]]);
+
+  const flowCols=['#D85A30','#BA7517','#639922','#1D9E75','#185FA5','#534AB7','#993C1D','#0F6E56','#378ADD','#7F77DD'];
+
+  pairs.forEach(([[nx,ny],[dx,dy]],i)=>{
+    const col=flowCols[i%flowCols.length];
+    svg+=`<line x1="${nx}" y1="${ny}" x2="${dx-4}" y2="${dy+(dy>ny?-3:3)}" stroke="${col}" stroke-width="1.2" stroke-dasharray="6 3" marker-end="url(#ar2)" opacity="0.7" style="animation:flow 1.2s linear infinite ${(i*0.12).toFixed(2)}s"/>`;
+  });
+
+  noisePts.forEach(([px,py],i)=>{
+    svg+=`<circle cx="${px}" cy="${py}" r="4.5" fill="${dark?'#444':'#B4B2A9'}" opacity="0.8"/>`;
+  });
+  dataPts.forEach(([px,py],i)=>{
+    svg+=`<circle cx="${px}" cy="${py}" r="4.5" fill="#1D9E75" opacity="0.85"/>`;
+  });
+
+  svg+=`<text x="180" y="210" text-anchor="middle" font-size="10" fill="${TT}">x_0 ~ N(0,I)  →  x_1 ~ p_data</text>`;
+  svg+=`<text x="68" y="10" font-size="9" fill="${TT}">source</text>`;
+  svg+=`<text x="270" y="10" text-anchor="middle" font-size="9" fill="#0F6E56">target</text>`;
+
+  const RX=368,RY=18,RW=280,RH=178;
+  svg+=grid(RX,RY,RW,RH);
+  svg+=`<rect x="${RX}" y="${RY}" width="${RW}" height="${RH}" fill="none" stroke="${dark?'#333':'#ddd'}" stroke-width="0.5"/>`;
+
+  const keyPts=[
+    {sx:RX+30,sy:RY+148,ex:RX+250,ey:RY+38,col:'#D85A30'},
+    {sx:RX+50,sy:RY+130,ex:RX+240,ey:RY+60,col:'#BA7517'},
+    {sx:RX+70,sy:RY+160,ex:RX+220,ey:RY+30,col:'#639922'},
+    {sx:RX+30,sy:RY+80,ex:RX+260,ey:RY+100,col:'#1D9E75'},
+    {sx:RX+80,sy:RY+100,ex:RX+230,ey:RY+80,col:'#534AB7'},
+  ];
+  keyPts.forEach(({sx,sy,ex,ey,col})=>{
+    svg+=`<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${col}" stroke-width="1.8" stroke-linecap="round" opacity="0.75" style="animation:flow 1.5s linear infinite"/>`;
+    svg+=`<circle cx="${sx}" cy="${sy}" r="4" fill="${dark?'#444':'#B4B2A9'}" opacity="0.8"/>`;
+    svg+=`<circle cx="${ex}" cy="${ey}" r="4" fill="${col}" opacity="0.85"/>`;
+  });
+
+  svg+=`<text x="${RX+RW/2}" y="${RY+RH+16}" text-anchor="middle" font-size="10" font-weight="500" fill="${TS}">straight conditional paths</text>`;
+  svg+=`<text x="340" y="${H-4}" text-anchor="middle" font-size="11" fill="${TS}">Each source particle travels in a straight line to its target — simple, fast, and deterministic.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+}
+
+function s2(el){
+  const W=680,H=232;
+  let svg=AR;
+
+  const LX=40,RX=370,Y0=20,PW=270,PH=170;
+  [LX,RX].forEach(x=>{
+    svg+=grid(x,Y0,PW,PH);
+    svg+=`<rect x="${x}" y="${Y0}" width="${PW}" height="${PH}" fill="none" stroke="${dark?'#333':'#ddd'}" stroke-width="0.5"/>`;
+  });
+
+  svg+=`<text x="${LX+PW/2}" y="${Y0-7}" text-anchor="middle" font-size="11" font-weight="500" fill="#A32D2D">Diffusion</text>`;
+  svg+=`<text x="${RX+PW/2}" y="${Y0-7}" text-anchor="middle" font-size="11" font-weight="500" fill="#1D9E75">Flow matching</text>`;
+
+  const src=[LX+40,Y0+140];
+  const dst=[LX+230,Y0+40];
+
+  const diffPts=[];
+  let cx=src[0],cy=src[1];
+  for(let s=0;s<12;s++){
+    const prog=(s+1)/12;
+    const tx=src[0]+(dst[0]-src[0])*prog;
+    const ty=src[1]+(dst[1]-src[1])*prog;
+    const jx=Math.sin(s*1.3)*22*(1-prog);
+    const jy=Math.cos(s*0.9)*18*(1-prog);
+    diffPts.push([tx+jx,ty+jy]);
+  }
+  diffPts.unshift(src);
+  diffPts.push(dst);
+  for(let i=0;i<diffPts.length-1;i++){
+    const [x1,y1]=diffPts[i];
+    const [x2,y2]=diffPts[i+1];
+    svg+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#E24B4A" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>`;
+  }
+  diffPts.forEach(([px,py],i)=>{
+    if(i===0||i===diffPts.length-1) return;
+    svg+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.5" fill="#E24B4A" opacity="0.5"/>`;
+  });
+  svg+=`<circle cx="${src[0]}" cy="${src[1]}" r="5" fill="${dark?'#444':'#B4B2A9'}"/>`;
+  svg+=`<circle cx="${dst[0]}" cy="${dst[1]}" r="5" fill="#A32D2D"/>`;
+  svg+=`<text x="${LX+PW/2}" y="${Y0+PH+14}" text-anchor="middle" font-size="10" fill="#A32D2D">~50 steps  ·  curved stochastic path</text>`;
+
+  const fsrc=[RX+40,Y0+140];
+  const fdst=[RX+230,Y0+40];
+  const fSteps=8;
+  svg+=`<line x1="${fsrc[0]}" y1="${fsrc[1]}" x2="${fdst[0]-4}" y2="${fdst[1]+4}" stroke="#1D9E75" stroke-width="2" stroke-linecap="round" marker-end="url(#ar)" style="animation:flow 1.2s linear infinite"/>`;
+  for(let s=1;s<fSteps;s++){
+    const t=s/fSteps;
+    const px=fsrc[0]+(fdst[0]-fsrc[0])*t;
+    const py=fsrc[1]+(fdst[1]-fsrc[1])*t;
+    svg+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3" fill="#1D9E75" opacity="${(0.3+t*0.6).toFixed(2)}"/>`;
+  }
+  svg+=`<circle cx="${fsrc[0]}" cy="${fsrc[1]}" r="5" fill="${dark?'#444':'#B4B2A9'}"/>`;
+  svg+=`<circle cx="${fdst[0]}" cy="${fdst[1]}" r="5" fill="#1D9E75"/>`;
+  svg+=`<text x="${RX+PW/2}" y="${Y0+PH+14}" text-anchor="middle" font-size="10" fill="#1D9E75">~10 steps  ·  straight ODE path</text>`;
+
+  const cY=Y0+PH+38;
+  const cols=['#A32D2D','#1D9E75'];
+  const labels=['Diffusion','Flow matching'];
+  const steps=[50,10];
+  const latency=['~100ms','~20ms'];
+  const maxW=220;
+  [0,1].forEach(i=>{
+    const bx=i===0?LX:RX;
+    const bw=steps[i]/50*maxW;
+    svg+=`<rect x="${bx}" y="${cY}" width="${maxW}" height="20" rx="2" fill="${dark?'#2a2a2a':'#f0eeea'}"/>`;
+    svg+=`<rect x="${bx}" y="${cY}" width="${bw}" height="20" rx="2" fill="${cols[i]}" opacity="0.8"/>`;
+    svg+=`<text x="${bx+maxW+8}" y="${cY+10}" dominant-baseline="central" font-size="10" fill="${cols[i]}">${steps[i]} steps — ${latency[i]}</text>`;
+  });
+
+  svg+=`<text x="340" y="${H-4}" text-anchor="middle" font-size="11" fill="${TS}">Straight paths = fewer integration steps = lower inference latency. Critical for real-time control.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+}
+
+function s3(el){
+  const W=680,H=232;
+  let svg=AR+grid(30,20,620,162);
+  svg+=`<rect x="30" y="20" width="620" height="162" fill="none" stroke="${dark?'#333':'#ddd'}" stroke-width="0.5"/>`;
+
+  const x0=[110,160],x1=[520,60];
+
+  const tSteps=[0.2,0.5,0.8];
+  const tCols=['#FAC775','#EF9F27','#BA7517'];
+
+  tSteps.forEach((t,ti)=>{
+    const ix=x0[0]+(x1[0]-x0[0])*t;
+    const iy=x0[1]+(x1[1]-x0[1])*t;
+    svg+=`<circle cx="${ix.toFixed(1)}" cy="${iy.toFixed(1)}" r="5" fill="${tCols[ti]}" opacity="0.85"/>`;
+    svg+=`<text x="${(ix+10).toFixed(1)}" y="${(iy-8).toFixed(1)}" font-size="9" fill="${tCols[ti]}">t=${t}</text>`;
+  });
+
+  svg+=`<line x1="${x0[0]}" y1="${x0[1]}" x2="${x1[0]-5}" y2="${x1[1]+2}" stroke="${dark?'#555':'#C4C0B8'}" stroke-width="1" stroke-dasharray="6 3"/>`;
+
+  svg+=`<circle cx="${x0[0]}" cy="${x0[1]}" r="8" fill="${dark?'#333':'#D3D1C7'}" stroke="${dark?'#555':'#B4B2A9'}" stroke-width="1"/>`;
+  svg+=`<text x="${x0[0]}" y="${x0[1]}" text-anchor="middle" dominant-baseline="central" font-size="8" fill="${TS}">x₀</text>`;
+  svg+=`<text x="${x0[0]-14}" y="${x0[1]+18}" font-size="9" fill="${TT}">noise</text>`;
+
+  svg+=`<circle cx="${x1[0]}" cy="${x1[1]}" r="8" fill="#1D9E75" stroke="#0F6E56" stroke-width="1"/>`;
+  svg+=`<text x="${x1[0]}" y="${x1[1]}" text-anchor="middle" dominant-baseline="central" font-size="8" fill="white">x₁</text>`;
+  svg+=`<text x="${x1[0]+14}" y="${x1[1]+18}" font-size="9" fill="#0F6E56">data</text>`;
+
+  const vtX=315,vtY=110;
+  const vdx=60,vdy=-52;
+  const vlen=Math.sqrt(vdx*vdx+vdy*vdy);
+  const nvx=vdx/vlen*42,nvy=vdy/vlen*42;
+  svg+=`<line x1="${vtX}" y1="${vtY}" x2="${(vtX+nvx).toFixed(1)}" y2="${(vtY+nvy).toFixed(1)}" stroke="#E86420" stroke-width="2.5" stroke-linecap="round" marker-end="url(#ar)" style="animation:flow 1s linear infinite"/>`;
+  svg+=`<circle cx="${vtX}" cy="${vtY}" r="5" fill="#E86420" opacity="0.9"/>`;
+  svg+=`<text x="${vtX+50}" y="${vtY-28}" font-size="10" font-weight="500" fill="#E86420">v = x₁ − x₀</text>`;
+  svg+=`<text x="${vtX+50}" y="${vtY-14}" font-size="9" fill="${TT}">target velocity</text>`;
+
+  const bx=380,by=118,bw=270,bh=54;
+  svg+=`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="5" fill="${CARD}" stroke="${CARDB}" stroke-width="0.5"/>`;
+  svg+=`<text x="${bx+bw/2}" y="${by+16}" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="500" fill="${dark?'#c2c0b6':'#3d3d3a'}">training objective</text>`;
+  svg+=`<text x="${bx+bw/2}" y="${by+36}" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#534AB7">min || v_θ(x_t, t, z_obs) − (x₁−x₀) ||²</text>`;
+
+  svg+=`<text x="340" y="${H-4}" text-anchor="middle" font-size="11" fill="${TS}">The model learns to predict one constant velocity per path — simpler than score matching in diffusion.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+}
+
+function s4(el){
+  const W=680,H=232;
+  const GX=30,GY=18,GW=400,GH=180;
+  let svg=AR+grid(GX,GY,GW,GH);
+  svg+=`<rect x="${GX}" y="${GY}" width="${GW}" height="${GH}" fill="none" stroke="${dark?'#333':'#ddd'}" stroke-width="0.5"/>`;
+  svg+=`<text x="${GX+GW/2}" y="${GY-7}" text-anchor="middle" font-size="11" font-weight="500" fill="${TS}">learned vector field</text>`;
+
+  const targetCx=GX+GW-70,targetCy=GY+GH/2;
+  const vfCols=['#D85A30','#BA7517','#639922','#1D9E75','#185FA5','#534AB7'];
+  let ci=0;
+  for(let gx=GX+22;gx<GX+GW-10;gx+=52){
+    for(let gy=GY+22;gy<GY+GH-10;gy+=38){
+      const dx=targetCx-gx,dy=targetCy-gy;
+      const len=Math.sqrt(dx*dx+dy*dy)||1;
+      const vx=dx/len*16,vy=dy/len*16;
+      const col=vfCols[ci%vfCols.length];
+      const ex=(gx+vx*0.85).toFixed(1),ey=(gy+vy*0.85).toFixed(1);
+      svg+=`<line x1="${gx}" y1="${gy}" x2="${ex}" y2="${ey}" stroke="${col}" stroke-width="1" opacity="0.55" marker-end="url(#ar2)"/>`;
+      ci++;
+    }
+  }
+
+  const nSrc=[[GX+40,GY+36],[GX+30,GY+GH-40],[GX+60,GY+GH/2],[GX+90,GY+22],[GX+80,GY+GH-24]];
+  const pCols=['#D85A30','#534AB7','#BA7517','#1D9E75','#378ADD'];
+  nSrc.forEach(([sx,sy],pi)=>{
+    const col=pCols[pi];
+    const dx=targetCx-sx,dy=targetCy-sy;
+    const steps=6;
+    let pts=[[sx,sy]];
+    for(let s=1;s<=steps;s++){
+      const t=s/steps;
+      pts.push([sx+dx*t,sy+dy*t]);
+    }
+    for(let i=0;i<pts.length-1;i++){
+      const [x1,y1]=pts[i],[x2,y2]=pts[i+1];
+      svg+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${col}" stroke-width="1.8" stroke-linecap="round" opacity="${(0.35+i/pts.length*0.6).toFixed(2)}" style="animation:flow 1.4s linear infinite ${(pi*0.18).toFixed(2)}s"/>`;
+    }
+    svg+=`<circle cx="${sx}" cy="${sy}" r="4" fill="${dark?'#444':'#B4B2A9'}"/>`;
+    svg+=`<circle cx="${(sx+dx).toFixed(1)}" cy="${(sy+dy).toFixed(1)}" r="5" fill="${col}" opacity="0.9"/>`;
+  });
+
+  svg+=`<circle cx="${targetCx}" cy="${targetCy}" r="12" fill="${dark?'#1a3a20':'#EAF3DE'}" stroke="#1D9E75" stroke-width="1.2"/>`;
+  svg+=`<text x="${targetCx}" y="${targetCy}" text-anchor="middle" dominant-baseline="central" font-size="9" font-weight="500" fill="#0F6E56">data</text>`;
+
+  const IX=GX+GW+28,IY=GY,IW=200,IH=GH;
+  svg+=`<rect x="${IX}" y="${IY}" width="${IW}" height="${IH}" rx="6" fill="${CARD}" stroke="${CARDB}" stroke-width="0.5"/>`;
+  svg+=`<text x="${IX+IW/2}" y="${IY+20}" text-anchor="middle" font-size="11" font-weight="500" fill="${dark?'#c2c0b6':'#3d3d3a'}">inference loop</text>`;
+
+  const infSteps=[
+    {label:'x_t ← noise',col:dark?'#333':'#D3D1C7',tc:TS},
+    {label:'v ← model(x_t,t)',col:dark?'#1a1a2e':'#EEEDFE',tc:'#534AB7'},
+    {label:'x_t ← x_t + v·dt',col:dark?'#1a2a18':'#EAF3DE',tc:'#1D9E75'},
+    {label:'repeat ~10×',col:dark?'#2a1a0a':'#FEF3E2',tc:'#BA7517'},
+    {label:'action ← x_1',col:dark?'#0a1e0a':'#C0DD97',tc:'#3B6D11'},
+  ];
+  infSteps.forEach(({label,col,tc},i)=>{
+    const ry=IY+38+i*28;
+    svg+=`<rect x="${IX+12}" y="${ry}" width="${IW-24}" height="22" rx="3" fill="${col}"/>`;
+    svg+=`<text x="${IX+IW/2}" y="${ry+11}" text-anchor="middle" dominant-baseline="central" font-size="10" fill="${tc}">${label}</text>`;
+    if(i<infSteps.length-1){
+      svg+=`<line x1="${IX+IW/2}" y1="${ry+22}" x2="${IX+IW/2}" y2="${ry+27}" stroke="${dark?'#444':'#ccc'}" stroke-width="0.5" marker-end="url(#ar2)"/>`;
+    }
+  });
+
+  svg+=`<text x="340" y="${H-4}" text-anchor="middle" font-size="11" fill="${TS}">Arrows everywhere point toward the data distribution. Follow them from any noise point to a valid action.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+}
+
+function s5(el){
+  const W=680,H=232;
+  let svg=AR;
+
+  const apps=[
+    {name:'π0',org:'Physical Intelligence',col:'#534AB7',bg:dark?'#12101e':'#EEEDFE',year:'2024',detail:'generalist robot policy'},
+    {name:'Octo-Flow',org:'Berkeley',col:'#1D9E75',bg:dark?'#0a1e14':'#E1F5EE',year:'2024',detail:'multi-task manipulation'},
+    {name:'RDT-1B',org:'THU',col:'#D85A30',bg:dark?'#1e0d08':'#FAECE7',year:'2024',detail:'1B param robot diffusion'},
+  ];
+
+  apps.forEach(({name,org,col,bg,year,detail},i)=>{
+    const x=30+i*218,y=18,w=200,h=82;
+    svg+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${bg}" stroke="${col}" stroke-width="0.5"/>`;
+    svg+=`<text x="${x+14}" y="${y+24}" font-size="15" font-weight="500" fill="${col}">${name}</text>`;
+    svg+=`<text x="${x+14}" y="${y+42}" font-size="10" fill="${TS}">${org}  ·  ${year}</text>`;
+    svg+=`<text x="${x+14}" y="${y+60}" font-size="10" fill="${TT}">${detail}</text>`;
+  });
+
+  const BX=30,BY=118,BW=620,BH=96;
+  svg+=`<rect x="${BX}" y="${BY}" width="${BW}" height="${BH}" rx="6" fill="${CARD}" stroke="${CARDB}" stroke-width="0.5"/>`;
+
+  const metrics=[
+    {label:'diffusion steps',diff:'50',flow:'10',better:'flow'},
+    {label:'inference latency',diff:'~100ms','flow':'~20ms',better:'flow'},
+    {label:'control freq.',diff:'10 Hz',flow:'50 Hz',better:'flow'},
+    {label:'path geometry',diff:'stochastic','flow':'deterministic',better:'flow'},
+  ];
+
+  svg+=`<text x="${BX+170}" y="${BY+20}" text-anchor="middle" font-size="10" fill="#A32D2D">Diffusion</text>`;
+  svg+=`<text x="${BX+370}" y="${BY+20}" text-anchor="middle" font-size="10" fill="#1D9E75">Flow matching</text>`;
+  svg+=`<line x1="${BX+280}" y1="${BY+10}" x2="${BX+280}" y2="${BY+BH-8}" stroke="${dark?'#333':'#ddd'}" stroke-width="0.5"/>`;
+
+  metrics.forEach(({label,diff,flow,better},i)=>{
+    const ry=BY+34+i*16;
+    svg+=`<text x="${BX+14}" y="${ry}" dominant-baseline="central" font-size="10" fill="${TT}">${label}</text>`;
+    svg+=`<text x="${BX+170}" y="${ry}" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#A32D2D">${diff}</text>`;
+    svg+=`<text x="${BX+370}" y="${ry}" text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="500" fill="#1D9E75">${flow}</text>`;
+    svg+=`<text x="${BX+BW-14}" y="${ry}" text-anchor="end" dominant-baseline="central" font-size="9" fill="#3B6D11">&#10003;</text>`;
+  });
+
+  svg+=`<text x="340" y="${H-4}" text-anchor="middle" font-size="11" fill="${TS}">Straight paths, fewer steps, faster control loops. Flow matching is the architecture of 2025 robot policies.</text>`;
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+}
+
+vr();vstrt();
+</script>
+</body>
+</html>
