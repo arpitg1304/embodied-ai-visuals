@@ -115,19 +115,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 const MODELS = [
-  { year: 2017, name: 'Domain Randomization', desc: 'Sim-to-real via randomized rendering', cat: 'learning', paper: 'https://arxiv.org/abs/1703.06907', anim: 'sim2real_gap_explainer' },
   { year: 2021, name: 'CLIPort', desc: 'CLIP + Transporter for language-conditioned manipulation', cat: 'perception', paper: 'https://arxiv.org/abs/2109.12098' },
   { year: 2022, name: 'BC-Z', desc: 'Zero-shot task generalization via imitation', cat: 'learning', paper: 'https://arxiv.org/abs/2202.02005' },
   { year: 2022, name: 'SayCan', desc: 'LLM grounded in robotic affordances', cat: 'planning', paper: 'https://arxiv.org/abs/2204.01691' },
   { year: 2022, name: 'Gato', desc: 'Generalist agent across 604 tasks', cat: 'generalist', paper: 'https://arxiv.org/abs/2205.06175' },
-  { year: 2022, name: 'Inner Monologue', desc: 'LLM embodied reasoning with feedback', cat: 'planning', paper: 'https://arxiv.org/abs/2207.05608' },
   { year: 2022, name: 'PerAct', desc: '3D manipulation via Perceiver transformer', cat: 'perception', paper: 'https://arxiv.org/abs/2209.05451' },
   { year: 2022, name: 'RT-1', desc: 'Large-scale real-world robotics transformer', cat: 'foundation', paper: 'https://arxiv.org/abs/2212.06817' },
   { year: 2023, name: 'UniPi', desc: 'Policies via text-guided video generation', cat: 'learning', paper: 'https://arxiv.org/abs/2302.00111' },
   { year: 2023, name: 'Diffusion Policy', desc: 'Actions via conditional denoising diffusion', cat: 'learning', paper: 'https://arxiv.org/abs/2303.04137', anim: 'diffusion_policy_explainer' },
   { year: 2023, name: 'RT-2', desc: 'VLA from web-scale pretraining', cat: 'foundation', paper: 'https://arxiv.org/abs/2307.15818', anim: 'vla_model_explainer' },
   { year: 2023, name: 'RoboCat', desc: 'Self-improving multi-embodiment agent', cat: 'generalist', paper: 'https://arxiv.org/abs/2306.11706' },
-  { year: 2023, name: 'Open X-Embodiment', desc: 'Cross-embodiment dataset from 22 robots', cat: 'foundation', paper: 'https://arxiv.org/abs/2310.08864' },
   { year: 2023, name: 'SuSIE', desc: 'Subgoal synthesis via image-editing diffusion', cat: 'learning', paper: 'https://arxiv.org/abs/2310.10639' },
   { year: 2024, name: 'Octo', desc: 'Open-source generalist on 800k trajectories', cat: 'foundation', paper: 'https://arxiv.org/abs/2405.12213' },
   { year: 2024, name: 'OpenVLA', desc: 'Open-source 7B vision-language-action model', cat: 'foundation', paper: 'https://arxiv.org/abs/2406.09246' },
