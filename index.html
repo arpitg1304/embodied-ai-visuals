@@ -217,6 +217,21 @@
     line-height: 1.5;
   }
 
+  .card-paper {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--color-text-tertiary);
+    text-decoration: none;
+    margin-top: 10px;
+    transition: color 0.2s;
+  }
+
+  .card-paper:hover {
+    color: var(--color-accent);
+  }
+
   .card-footer {
     display: flex;
     align-items: center;
@@ -453,33 +468,12 @@
 <div class="toast" id="toast"></div>
 
 <footer>
-  Built for learning &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals" target="_blank">View on GitHub</a> &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals/blob/main/CONTRIBUTING.md" target="_blank">Contribute</a> &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals/issues/new?template=animation-request.yml" target="_blank">Request an animation</a>
+  Built for learning &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals" target="_blank">View on GitHub</a> &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals/blob/main/CONTRIBUTING.md" target="_blank">Contribute</a> &mdash; <a href="https://github.com/arpitg1304/embodied-ai-visuals/issues/new?template=animation-request.yml" target="_blank">Request an animation</a> &mdash; Maintained by <a href="https://www.linkedin.com/in/arpitgupta/" target="_blank" rel="noopener">Arpit</a>
 </footer>
 
 <script>
 /* ── Animation registry ── */
 const ANIMATIONS = [
-  {
-    id: 'vla_model_explainer',
-    title: 'VLA Model Explainer',
-    description: 'Step-by-step walkthrough of Vision-Language-Action models — from camera input to robot action output.',
-    tag: 'VLA',
-    category: 'Perception',
-  },
-  {
-    id: 'sim2real_gap_explainer',
-    title: 'Sim-to-Real Gap Explainer',
-    description: 'Why policies trained in simulation fail in the real world — visual gaps, physics mismatch, sensor noise — and how domain randomization bridges them.',
-    tag: 'Sim2Real',
-    category: 'Learning',
-  },
-  {
-    id: 'reward_shaping_explainer',
-    title: 'Reward Shaping — Sparse vs Dense',
-    description: 'How reward function design shapes learning — sparse rewards, dense gradients, reward hacking, and potential-based shaping.',
-    tag: 'RL',
-    category: 'Learning',
-  },
   {
     id: 'video_action_model_explainer',
     title: 'Video Action Models & Latent Space',
@@ -488,18 +482,46 @@ const ANIMATIONS = [
     category: 'Learning',
   },
   {
-    id: 'diffusion_policy_explainer',
-    title: 'Diffusion Policy',
-    description: 'How denoising diffusion iteratively refines random noise into smooth action trajectories — handling multimodal demonstrations that defeat behavioral cloning.',
-    tag: 'Diffusion',
-    category: 'Learning',
-  },
-  {
     id: 'flow_matching_explainer',
     title: 'Flow Matching',
     description: 'How flow matching learns straight-line velocity fields to transport noise into action distributions — a faster, simpler alternative to diffusion.',
     tag: 'Diffusion',
     category: 'Learning',
+    paper: 'https://arxiv.org/abs/2210.02747',
+  },
+  {
+    id: 'diffusion_policy_explainer',
+    title: 'Diffusion Policy',
+    description: 'How denoising diffusion iteratively refines random noise into smooth action trajectories — handling multimodal demonstrations that defeat behavioral cloning.',
+    tag: 'Diffusion',
+    category: 'Learning',
+    paper: 'https://arxiv.org/abs/2303.04137',
+  },
+  {
+    id: 'vla_model_explainer',
+    title: 'VLA Model Explainer',
+    description: 'Step-by-step walkthrough of Vision-Language-Action models — from camera input to robot action output.',
+    tag: 'VLA',
+    category: 'Perception',
+    paper: 'https://arxiv.org/abs/2307.15818',
+  },
+  {
+    id: 'sim2real_gap_explainer',
+    title: 'Sim-to-Real Gap Explainer',
+    description: 'Why policies trained in simulation fail in the real world — visual gaps, physics mismatch, sensor noise — and how domain randomization bridges them.',
+    tag: 'Sim2Real',
+    category: 'Learning',
+    paper: 'https://arxiv.org/abs/1703.06907',
+  },
+  {
+    id: 'reward_shaping_explainer',
+    title: 'Reward Shaping — Sparse vs Dense',
+    description: 'How reward function design shapes learning — sparse rewards, dense gradients, reward hacking, and potential-based shaping.',
+    tag: 'RL',
+    category: 'Learning',
+    paper: 'https://people.eecs.berkeley.edu/~pabbeel/cs287-fa09/readings/NgHaradaRussell-shaping-ICML1999.pdf',
+    category: 'Learning',
+    paper: 'https://arxiv.org/abs/2210.02747',
   },
   // To add a new animation:
   // 1. Drop a .html file in animations/
@@ -627,14 +649,18 @@ function renderGallery() {
     const card = document.createElement('div');
     card.className = 'card';
     card.onclick = (e) => {
-      if (e.target.closest('.card-embed')) return;
+      if (e.target.closest('.card-embed') || e.target.closest('.card-paper')) return;
       openViewer(anim);
     };
+    const paperLink = anim.paper
+      ? `<a class="card-paper" href="${anim.paper}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 Read the paper</a>`
+      : '';
     card.innerHTML = `
       <div class="card-preview">${PREVIEWS[anim.id] || defaultPreview(anim)}</div>
       <div class="card-body">
         <div class="card-title">${anim.title}</div>
         <div class="card-desc">${anim.description}</div>
+        ${paperLink}
         <div class="card-footer">
           <span class="card-tag">${anim.tag}</span>
           <button class="card-embed" onclick="copyEmbedFor('${anim.id}', event)" title="Copy iframe embed code">&lt;/&gt; Embed</button>
