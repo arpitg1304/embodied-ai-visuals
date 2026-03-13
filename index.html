@@ -366,6 +366,31 @@
     color: var(--color-accent);
   }
 
+  .viewer-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 10px 14px;
+    border-radius: 8px;
+    line-height: 1;
+    z-index: 1001;
+    transition: all 0.15s;
+  }
+
+  .viewer-nav:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: var(--color-surface-hover);
+  }
+
+  .viewer-nav.prev { left: 12px; }
+  .viewer-nav.next { right: 12px; }
+
   .viewer-close {
     background: none;
     border: none;
@@ -410,6 +435,9 @@
     .hero-stats { gap: 20px; }
     .gallery { grid-template-columns: 1fr; }
     .viewer-content { padding: 20px 16px; }
+    .viewer-nav { padding: 8px 10px; font-size: 18px; }
+    .viewer-nav.prev { left: 4px; }
+    .viewer-nav.next { right: 4px; }
     .filter-bar { padding: 16px 16px 0; }
     main { padding: 16px 16px 40px; }
   }
@@ -452,6 +480,8 @@
 
 <!-- Viewer overlay -->
 <div class="viewer-overlay" id="viewer" onclick="if(event.target===this)closeViewer()">
+  <button class="viewer-nav prev" onclick="navigateAnim(-1)">&#8249;</button>
+  <button class="viewer-nav next" onclick="navigateAnim(1)">&#8250;</button>
   <div class="viewer-container">
     <div class="viewer-header">
       <span class="viewer-title" id="viewer-title"></span>
@@ -608,8 +638,22 @@ const PREVIEWS = {
 const categories = [...new Set(ANIMATIONS.map(a => a.category))].sort();
 const tags = ['All', ...new Set(ANIMATIONS.map(a => a.tag))];
 
-document.getElementById('stat-count').textContent = ANIMATIONS.length;
-document.getElementById('stat-topics').textContent = tags.length - 1; // exclude 'All'
+// Animated count-up for hero stats
+function animateCount(el, target, suffix = '') {
+  const duration = 800;
+  const start = performance.now();
+  const isNum = typeof target === 'number';
+  if (!isNum) { el.textContent = target; return; }
+  function tick(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+    el.textContent = Math.round(target * ease) + suffix;
+    if (t < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+animateCount(document.getElementById('stat-count'), ANIMATIONS.length);
+animateCount(document.getElementById('stat-topics'), tags.length - 1);
 
 /* ── Filter bar ── */
 let activeFilter = 'All';
@@ -705,8 +749,17 @@ function closeViewer() {
   history.pushState({}, '', location.pathname);
 }
 
+function navigateAnim(dir) {
+  if (!currentAnim) return;
+  const idx = ANIMATIONS.findIndex(a => a.id === currentAnim.id);
+  const next = (idx + dir + ANIMATIONS.length) % ANIMATIONS.length;
+  openViewer(ANIMATIONS[next]);
+}
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeViewer();
+  if (e.key === 'ArrowLeft') navigateAnim(-1);
+  if (e.key === 'ArrowRight') navigateAnim(1);
 });
 
 // Handle back/forward navigation
