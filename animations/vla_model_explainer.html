@@ -1,14 +1,42 @@
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VLA Model Explainer</title>
 <style>
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-@keyframes pulse{0%,100%{opacity:.12}60%{opacity:.92}}
-@keyframes march{to{stroke-dashoffset:-14}}
-.vd{width:7px;height:7px;border-radius:50%;background:var(--color-border-secondary);cursor:pointer;border:none;padding:0;flex-shrink:0;transition:background .2s}
-.vd.on{background:var(--color-text-primary)}
-.vb{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;border:.5px solid var(--color-border-secondary);background:transparent;cursor:pointer;color:var(--color-text-primary);transition:background .15s}
-.vb:hover{background:var(--color-background-secondary)}
+  :root {
+    --color-bg: #0d1117;
+    --color-surface: #161b22;
+    --color-surface-hover: #1c2333;
+    --color-border: #30363d;
+    --color-text-primary: #e6edf3;
+    --color-text-secondary: #8b949e;
+    --color-text-tertiary: #6e7681;
+    --color-accent: #58a6ff;
+    --color-accent-subtle: rgba(88, 166, 255, 0.1);
+    --color-border-secondary: #30363d;
+    --color-border-tertiary: #21262d;
+    --color-background-secondary: #1c2333;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text-primary);
+    padding: 24px 32px;
+  }
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  @keyframes pulse{0%,100%{opacity:.12}60%{opacity:.92}}
+  @keyframes march{to{stroke-dashoffset:-14}}
+  .vd{width:7px;height:7px;border-radius:50%;background:var(--color-border-secondary);cursor:pointer;border:none;padding:0;flex-shrink:0;transition:background .2s}
+  .vd.on{background:var(--color-text-primary)}
+  .vb{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;border:.5px solid var(--color-border-secondary);background:transparent;cursor:pointer;color:var(--color-text-primary);transition:background .15s}
+  .vb:hover{background:var(--color-background-secondary)}
 </style>
+</head>
+<body>
 <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px" id="vdots"></div>
 <div style="margin-bottom:14px">
   <div id="vtit" style="font-size:14px;font-weight:500;color:var(--color-text-primary)"></div>
@@ -198,3 +226,5 @@ ${bars}
 }
 vr();vstrt();
 </script>
+</body>
+</html>

@@ -365,7 +365,14 @@
   .viewer-close:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
 
   .viewer-content {
-    padding: 32px 40px;
+    padding: 0;
+  }
+
+  .viewer-content iframe {
+    display: block;
+    width: 100%;
+    height: 70vh;
+    border: none;
   }
 
   /* ── Footer ── */
@@ -459,6 +466,13 @@ const ANIMATIONS = [
     tag: 'VLA',
     category: 'Perception',
   },
+  {
+    id: 'sim2real_gap_explainer',
+    title: 'Sim-to-Real Gap Explainer',
+    description: 'Why policies trained in simulation fail in the real world — visual gaps, physics mismatch, sensor noise — and how domain randomization bridges them.',
+    tag: 'Sim2Real',
+    category: 'Learning',
+  },
   // To add a new animation:
   // 1. Drop a .html file in animations/
   // 2. Add an entry here with: id (filename without .html), title, description, tag, category
@@ -477,6 +491,16 @@ const PREVIEWS = {
     <text x="250" y="65" text-anchor="middle" font-size="8" fill="#6e7681">32 layers</text>
     <line x1="250" y1="90" x2="250" y2="110" stroke="#D85A30" stroke-width="1" stroke-dasharray="3 2"/>
     <text x="250" y="125" text-anchor="middle" font-size="10" fill="#D85A30">7-DoF Action</text>
+  </svg>`,
+  sim2real_gap_explainer: `<svg viewBox="0 0 320 140" fill="none">
+    <rect x="20" y="20" width="120" height="90" rx="6" fill="#E8F4FD" stroke="#B5D4F4" stroke-width="0.5"/>
+    <text x="80" y="38" text-anchor="middle" font-size="9" fill="#0C447C" font-weight="500">SIM</text>
+    <rect x="55" y="70" width="30" height="24" rx="2" fill="#378ADD" stroke="#185FA5" stroke-width="0.5"/>
+    <text x="160" y="70" text-anchor="middle" font-size="18" fill="#6e7681">&ne;</text>
+    <rect x="180" y="20" width="120" height="90" rx="6" fill="#FDF4E8" stroke="#EF9F27" stroke-width="0.5"/>
+    <text x="240" y="38" text-anchor="middle" font-size="9" fill="#633806" font-weight="500">REAL</text>
+    <rect x="215" y="70" width="30" height="24" rx="2" fill="#8B6E4E" stroke="#633806" stroke-width="0.5"/>
+    <text x="160" y="130" text-anchor="middle" font-size="9" fill="#8b949e">Domain Randomization</text>
   </svg>`,
 };
 
@@ -518,45 +542,31 @@ function renderGallery() {
     return;
   }
 
-  // Group by category
-  const grouped = {};
-  filtered.forEach(a => {
-    if (!grouped[a.category]) grouped[a.category] = [];
-    grouped[a.category].push(a);
-  });
+  const grid = document.createElement('div');
+  grid.className = 'gallery';
 
-  Object.keys(grouped).sort().forEach(cat => {
-    const label = document.createElement('div');
-    label.className = 'section-label';
-    label.textContent = cat;
-    container.appendChild(label);
-
-    const grid = document.createElement('div');
-    grid.className = 'gallery';
-
-    grouped[cat].forEach(anim => {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.onclick = (e) => {
-        if (e.target.closest('.card-embed')) return;
-        openViewer(anim);
-      };
-      card.innerHTML = `
-        <div class="card-preview">${PREVIEWS[anim.id] || defaultPreview(anim)}</div>
-        <div class="card-body">
-          <div class="card-title">${anim.title}</div>
-          <div class="card-desc">${anim.description}</div>
-          <div class="card-footer">
-            <span class="card-tag">${anim.tag}</span>
-            <button class="card-embed" onclick="copyEmbedFor('${anim.id}', event)" title="Copy iframe embed code">&lt;/&gt; Embed</button>
-          </div>
+  filtered.forEach(anim => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.onclick = (e) => {
+      if (e.target.closest('.card-embed')) return;
+      openViewer(anim);
+    };
+    card.innerHTML = `
+      <div class="card-preview">${PREVIEWS[anim.id] || defaultPreview(anim)}</div>
+      <div class="card-body">
+        <div class="card-title">${anim.title}</div>
+        <div class="card-desc">${anim.description}</div>
+        <div class="card-footer">
+          <span class="card-tag">${anim.tag}</span>
+          <button class="card-embed" onclick="copyEmbedFor('${anim.id}', event)" title="Copy iframe embed code">&lt;/&gt; Embed</button>
         </div>
-      `;
-      grid.appendChild(card);
-    });
-
-    container.appendChild(grid);
+      </div>
+    `;
+    grid.appendChild(card);
   });
+
+  container.appendChild(grid);
 }
 
 function defaultPreview(anim) {
@@ -576,32 +586,16 @@ function openViewer(anim) {
   currentAnim = anim;
   document.getElementById('viewer-title').textContent = anim.title;
   const content = document.getElementById('viewer-content');
-  content.innerHTML = '<p style="color:var(--color-text-secondary)">Loading...</p>';
+  // Use an iframe so each load gets a fresh JS execution context
+  content.innerHTML = `<iframe src="animations/${anim.id}.html"></iframe>`;
   document.getElementById('viewer').classList.add('active');
   document.body.style.overflow = 'hidden';
-
-  fetch(`animations/${anim.id}.html`)
-    .then(r => r.text())
-    .then(html => {
-      content.innerHTML = html;
-      content.querySelectorAll('script').forEach(oldScript => {
-        const newScript = document.createElement('script');
-        if (oldScript.src) {
-          newScript.src = oldScript.src;
-        } else {
-          newScript.textContent = oldScript.textContent;
-        }
-        oldScript.replaceWith(newScript);
-      });
-    })
-    .catch(() => {
-      content.innerHTML = '<p style="color:#f85149">Failed to load animation.</p>';
-    });
 }
 
 function closeViewer() {
   document.getElementById('viewer').classList.remove('active');
   document.body.style.overflow = '';
+  // Remove the iframe to stop animations and free memory
   document.getElementById('viewer-content').innerHTML = '';
   currentAnim = null;
 }
