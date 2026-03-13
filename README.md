@@ -9,6 +9,7 @@ Interactive animations explaining core concepts in robotics and embodied intelli
 | Animation | Category | Description |
 |-----------|----------|-------------|
 | VLA Model Explainer | Perception | Step-by-step walkthrough of Vision-Language-Action models — from camera input to robot action output |
+| Sim-to-Real Gap Explainer | Learning | Why sim-trained policies fail in the real world and how domain randomization bridges the gap |
 
 ## Features
 
