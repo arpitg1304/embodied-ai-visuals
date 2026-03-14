@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Learning Physics from Video</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#e6edf3;padding:24px 32px;margin:0;min-height:100vh}
+
+.header{text-align:center;margin-bottom:20px}
+.header h1{font-size:22px;font-weight:700;background:linear-gradient(135deg,#e6edf3,#58a6ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px}
+.header p{color:#8b949e;font-size:13px}
+
+.controls{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:16px}
+.step-dots{display:flex;gap:6px}
+.dot{width:10px;height:10px;border-radius:50%;background:#30363d;cursor:pointer;border:none;padding:0;transition:all 0.2s}
+.dot.active{background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,0.4)}
+.nav-btn{background:none;border:1px solid #30363d;color:#8b949e;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
+.nav-btn:hover{border-color:#58a6ff;color:#58a6ff}
+.play-btn{background:none;border:1px solid #30363d;color:#8b949e;border-radius:6px;height:32px;padding:0 12px;cursor:pointer;font-size:12px;font-family:inherit;transition:all 0.15s}
+.play-btn:hover{border-color:#58a6ff;color:#58a6ff}
+.play-btn.playing{border-color:#1D9E75;color:#1D9E75}
+
+.step-info{text-align:center;margin-bottom:16px;min-height:52px}
+.step-title{font-size:16px;font-weight:600;margin-bottom:4px;color:#e6edf3}
+.step-desc{font-size:13px;color:#8b949e;max-width:600px;margin:0 auto;line-height:1.5}
+
+.canvas-wrap{display:flex;justify-content:center}
+.canvas-wrap svg{max-width:100%;height:auto;opacity:0;transition:opacity 0.4s ease}
+.canvas-wrap svg.visible{opacity:1}
+
+.progress{height:2px;background:#1c2333;border-radius:1px;overflow:hidden;max-width:500px;margin:0 auto 12px}
+.progress-fill{height:100%;background:#58a6ff;transition:width 0.3s ease}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Learning Physics from Video</h1>
+  <p>How watching internet-scale video teaches robots gravity, collisions, and object permanence</p>
+</div>
+
+<div class="progress"><div class="progress-fill" id="progress"></div></div>
+
+<div class="controls">
+  <button class="nav-btn" onclick="navigate(-1)">&#8249;</button>
+  <div class="step-dots" id="dots"></div>
+  <button class="nav-btn" onclick="navigate(1)">&#8250;</button>
+  <button class="play-btn" id="play-btn" onclick="togglePlay()">&#9654; Auto</button>
+</div>
+
+<div class="step-info">
+  <div class="step-title" id="step-title"></div>
+  <div class="step-desc" id="step-desc"></div>
+</div>
+
+<div class="canvas-wrap">
+  <svg id="viz" viewBox="0 0 700 360" fill="none" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<script>
+const STEPS = [
+  {
+    title: 'Step 1: Billions of Unlabeled Videos',
+    desc: 'The internet is full of videos showing physical interactions — objects falling, liquids pouring, things colliding. No labels needed — physics is implicit in every frame.',
+  },
+  {
+    title: 'Step 2: Video Prediction as Pretext Task',
+    desc: 'The model learns to predict the next frame given previous frames. To predict accurately, it must learn the rules of physics — gravity pulls things down, solids don\'t pass through each other.',
+  },
+  {
+    title: 'Step 3: Emergent Physical Priors',
+    desc: 'Without any explicit physics engine, the model discovers core physical concepts: gravity, collision dynamics, object permanence, and material properties — all from pixel patterns.',
+  },
+  {
+    title: 'Step 4: Physical Reasoning at Test Time',
+    desc: 'Given a novel scene, the model can predict what will happen next — a ball will fall, a stack will topple, a cup will spill — using its learned physics intuition.',
+  },
+  {
+    title: 'Step 5: Transfer to Robot Control',
+    desc: 'These learned physics priors become a robot\'s intuition. Instead of hand-coded dynamics, the robot uses video-learned world knowledge to plan actions in the real world.',
+  },
+];
+
+let current = 0;
+let autoTimer = null;
+let playing = false;
+
+const dotsEl = document.getElementById('dots');
+STEPS.forEach((_, i) => {
+  const d = document.createElement('button');
+  d.className = 'dot' + (i === 0 ? ' active' : '');
+  d.onclick = () => { stopPlay(); goTo(i); };
+  dotsEl.appendChild(d);
+});
+
+function navigate(dir) {
+  stopPlay();
+  goTo(Math.max(0, Math.min(STEPS.length - 1, current + dir)));
+}
+
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  playing = true;
+  document.getElementById('play-btn').innerHTML = '&#9208; Pause';
+  document.getElementById('play-btn').classList.add('playing');
+  advanceAuto();
+}
+
+function stopPlay() {
+  playing = false;
+  clearTimeout(autoTimer);
+  document.getElementById('play-btn').innerHTML = '&#9654; Auto';
+  document.getElementById('play-btn').classList.remove('playing');
+}
+
+function advanceAuto() {
+  if (!playing) return;
+  const next = (current + 1) % STEPS.length;
+  goTo(next);
+  autoTimer = setTimeout(advanceAuto, 5000);
+}
+
+function goTo(idx) {
+  current = idx;
+  document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+  document.getElementById('step-title').textContent = STEPS[idx].title;
+  document.getElementById('step-desc').textContent = STEPS[idx].desc;
+  document.getElementById('progress').style.width = ((idx + 1) / STEPS.length * 100) + '%';
+
+  const svg = document.getElementById('viz');
+  svg.classList.remove('visible');
+  setTimeout(() => {
+    renderStep(idx);
+    svg.classList.add('visible');
+  }, 200);
+}
+
+function renderStep(step) {
+  const svg = document.getElementById('viz');
+
+  // Reusable: video frame thumbnail
+  const videoFrame = (x, y, w, h, label, color = '#58a6ff') => `
+    <g transform="translate(${x},${y})">
+      <rect x="0" y="0" width="${w}" height="${h}" rx="4" fill="#161b22" stroke="${color}" stroke-width="1"/>
+      <polygon points="${w/2-6},${h/2-5} ${w/2-6},${h/2+5} ${w/2+5},${h/2}" fill="${color}" opacity="0.5"/>
+      ${label ? `<text x="${w/2}" y="${h+14}" text-anchor="middle" font-size="8" fill="#6e7681">${label}</text>` : ''}
+    </g>
+  `;
+
+  if (step === 0) {
+    svg.innerHTML = `
+      <!-- Grid of video thumbnails -->
+      ${videoFrame(30, 30, 80, 55, 'falling ball', '#D85A30')}
+      ${videoFrame(140, 30, 80, 55, 'pouring water', '#58a6ff')}
+      ${videoFrame(250, 30, 80, 55, 'stacking blocks', '#1D9E75')}
+      ${videoFrame(360, 30, 80, 55, 'bouncing ball', '#A371F7')}
+      ${videoFrame(470, 30, 80, 55, 'sliding box', '#E3B341')}
+      ${videoFrame(580, 30, 80, 55, 'swinging arm', '#D85A30')}
+
+      ${videoFrame(85, 120, 80, 55, 'collision', '#A371F7')}
+      ${videoFrame(195, 120, 80, 55, 'rolling', '#1D9E75')}
+      ${videoFrame(305, 120, 80, 55, 'dropping', '#58a6ff')}
+      ${videoFrame(415, 120, 80, 55, 'catching', '#D85A30')}
+      ${videoFrame(525, 120, 80, 55, 'pushing', '#E3B341')}
+
+      <!-- Flowing dots to represent scale -->
+      <g opacity="0.4">
+        <circle cx="350" cy="230" r="2" fill="#58a6ff">
+          <animate attributeName="cy" values="230;225;230" dur="2s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="340" cy="235" r="1.5" fill="#D85A30">
+          <animate attributeName="cy" values="235;230;235" dur="2s" repeatCount="indefinite" begin="0.3s"/>
+        </circle>
+        <circle cx="360" cy="233" r="1.5" fill="#1D9E75">
+          <animate attributeName="cy" values="233;228;233" dur="2s" repeatCount="indefinite" begin="0.6s"/>
+        </circle>
+      </g>
+
+      <!-- Scale label -->
+      <g transform="translate(200,255)">
+        <rect x="0" y="0" width="300" height="50" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+        <text x="150" y="20" text-anchor="middle" font-size="12" fill="#58a6ff" font-weight="600">Billions of video clips</text>
+        <text x="150" y="38" text-anchor="middle" font-size="10" fill="#6e7681">YouTube, Ego4D, Something-Something, RoboNet, DROID...</text>
+      </g>
+
+      <text x="350" y="340" text-anchor="middle" font-size="10" fill="#484f58">every video implicitly encodes the laws of physics</text>
+    `;
+  }
+
+  else if (step === 1) {
+    svg.innerHTML = `
+      <!-- Input: past frames -->
+      <g transform="translate(20,60)">
+        <rect x="0" y="8" width="55" height="40" rx="3" fill="#161b22" stroke="#484f58" stroke-width="0.8" opacity="0.5"/>
+        <rect x="15" y="4" width="55" height="40" rx="3" fill="#161b22" stroke="#484f58" stroke-width="0.8" opacity="0.7"/>
+        <rect x="30" y="0" width="55" height="40" rx="3" fill="#161b22" stroke="#58a6ff" stroke-width="1"/>
+        <!-- Ball in frames -->
+        <circle cx="55" cy="12" r="6" fill="#D85A30" opacity="0.5"/>
+        <circle cx="55" cy="18" r="6" fill="#D85A30" opacity="0.7"/>
+        <circle cx="55" cy="24" r="6" fill="#D85A30" opacity="0.9"/>
+        <text x="42" y="58" text-anchor="middle" font-size="9" fill="#6e7681">frames t-2, t-1, t</text>
+      </g>
+
+      <!-- Arrow -->
+      <line x1="105" y1="80" x2="155" y2="80" stroke="#484f58" stroke-width="1" stroke-dasharray="3 2"/>
+      <polygon points="155,77 161,80 155,83" fill="#484f58"/>
+
+      <!-- Prediction model -->
+      <g transform="translate(165,35)">
+        <rect x="0" y="0" width="160" height="90" rx="10" fill="#161b22" stroke="#A371F7" stroke-width="1.5"/>
+        <text x="80" y="22" text-anchor="middle" font-size="11" fill="#A371F7" font-weight="600">Video Predictor</text>
+        <text x="80" y="40" text-anchor="middle" font-size="9" fill="#6e7681">predict frame t+1</text>
+        <!-- Neural network icon -->
+        <g transform="translate(25,48)">
+          <circle cx="0" cy="0" r="4" fill="#A371F7" opacity="0.3"/>
+          <circle cx="0" cy="16" r="4" fill="#A371F7" opacity="0.3"/>
+          <circle cx="0" cy="32" r="4" fill="#A371F7" opacity="0.3"/>
+          <circle cx="55" cy="4" r="4" fill="#A371F7" opacity="0.5"/>
+          <circle cx="55" cy="20" r="4" fill="#A371F7" opacity="0.5"/>
+          <circle cx="110" cy="12" r="5" fill="#A371F7" opacity="0.7"/>
+          <line x1="4" y1="0" x2="51" y2="4" stroke="#A371F7" stroke-width="0.5" opacity="0.3"/>
+          <line x1="4" y1="0" x2="51" y2="20" stroke="#A371F7" stroke-width="0.5" opacity="0.3"/>
+          <line x1="4" y1="16" x2="51" y2="4" stroke="#A371F7" stroke-width="0.5" opacity="0.3"/>
+          <line x1="4" y1="16" x2="51" y2="20" stroke="#A371F7" stroke-width="0.5" opacity="0.3"/>
+          <line x1="4" y1="32" x2="51" y2="4" stroke="#A371F7" stroke-width="0.5" opacity="0.3"/>
+          <line x1="4" y1="32" x2="51" y2="20" stroke="#A371F7" stroke-width="0.5" opacity="0.3"/>
+          <line x1="59" y1="4" x2="105" y2="12" stroke="#A371F7" stroke-width="0.5" opacity="0.4"/>
+          <line x1="59" y1="20" x2="105" y2="12" stroke="#A371F7" stroke-width="0.5" opacity="0.4"/>
+        </g>
+      </g>
+
+      <!-- Arrow -->
+      <line x1="330" y1="80" x2="380" y2="80" stroke="#484f58" stroke-width="1" stroke-dasharray="3 2"/>
+      <polygon points="380,77 386,80 380,83" fill="#484f58"/>
+
+      <!-- Predicted frame -->
+      <g transform="translate(390,50)">
+        <rect x="0" y="0" width="70" height="55" rx="4" fill="#161b22" stroke="#1D9E75" stroke-width="1.5"/>
+        <text x="35" y="14" text-anchor="middle" font-size="9" fill="#1D9E75">predicted</text>
+        <circle cx="35" cy="36" r="6" fill="#D85A30" opacity="0.8"/>
+        <text x="35" y="70" text-anchor="middle" font-size="8" fill="#6e7681">frame t+1</text>
+      </g>
+
+      <!-- vs actual -->
+      <text x="490" y="78" text-anchor="middle" font-size="14" fill="#6e7681">vs</text>
+
+      <g transform="translate(520,50)">
+        <rect x="0" y="0" width="70" height="55" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+        <text x="35" y="14" text-anchor="middle" font-size="9" fill="#58a6ff">actual</text>
+        <circle cx="35" cy="38" r="6" fill="#D85A30" opacity="0.8"/>
+        <text x="35" y="70" text-anchor="middle" font-size="8" fill="#6e7681">frame t+1</text>
+      </g>
+
+      <!-- Loss -->
+      <g transform="translate(400,145)">
+        <rect x="0" y="0" width="200" height="36" rx="6" fill="#161b22" stroke="#D85A30" stroke-width="1"/>
+        <text x="100" y="15" text-anchor="middle" font-size="10" fill="#D85A30" font-weight="600">L = ||predicted - actual||²</text>
+        <text x="100" y="30" text-anchor="middle" font-size="9" fill="#6e7681">minimize prediction error</text>
+      </g>
+
+      <!-- Insight -->
+      <g transform="translate(80,210)">
+        <rect x="0" y="0" width="540" height="70" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+        <text x="270" y="22" text-anchor="middle" font-size="11" fill="#58a6ff" font-weight="600">The key insight</text>
+        <text x="270" y="42" text-anchor="middle" font-size="10" fill="#8b949e">To predict the ball's position in the next frame, the model MUST learn</text>
+        <text x="270" y="58" text-anchor="middle" font-size="10" fill="#8b949e">that gravity accelerates objects downward — no physics labels needed</text>
+      </g>
+
+      <text x="350" y="340" text-anchor="middle" font-size="10" fill="#484f58">self-supervised learning: the future IS the label</text>
+    `;
+  }
+
+  else if (step === 2) {
+    svg.innerHTML = `
+      <!-- Title row -->
+      <text x="350" y="25" text-anchor="middle" font-size="12" fill="#58a6ff" font-weight="600">Physical concepts learned from video prediction</text>
+
+      <!-- Gravity -->
+      <g transform="translate(30,45)">
+        <rect x="0" y="0" width="145" height="130" rx="8" fill="#161b22" stroke="#D85A30" stroke-width="1.2"/>
+        <text x="72" y="22" text-anchor="middle" font-size="11" fill="#D85A30" font-weight="600">Gravity</text>
+        <!-- Falling ball trajectory -->
+        <circle cx="72" cy="42" r="7" fill="#D85A30" opacity="0.2"/>
+        <circle cx="72" cy="58" r="7" fill="#D85A30" opacity="0.35"/>
+        <circle cx="72" cy="78" r="7" fill="#D85A30" opacity="0.55"/>
+        <circle cx="72" cy="102" r="7" fill="#D85A30" opacity="0.8">
+          <animate attributeName="opacity" values="0.6;1;0.6" dur="2s" repeatCount="indefinite"/>
+        </circle>
+        <line x1="85" y1="42" x2="85" y2="102" stroke="#D85A30" stroke-width="0.8" stroke-dasharray="2 2" opacity="0.4"/>
+        <text x="100" y="72" font-size="8" fill="#6e7681">a = 9.8</text>
+        <text x="72" y="122" text-anchor="middle" font-size="8" fill="#6e7681">objects accelerate down</text>
+      </g>
+
+      <!-- Collisions -->
+      <g transform="translate(195,45)">
+        <rect x="0" y="0" width="145" height="130" rx="8" fill="#161b22" stroke="#A371F7" stroke-width="1.2"/>
+        <text x="72" y="22" text-anchor="middle" font-size="11" fill="#A371F7" font-weight="600">Collisions</text>
+        <!-- Two objects approaching -->
+        <circle cx="35" cy="72" r="10" fill="#A371F7" opacity="0.6">
+          <animate attributeName="cx" values="35;55;35" dur="2.5s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="110" cy="72" r="10" fill="#58a6ff" opacity="0.6">
+          <animate attributeName="cx" values="110;90;110" dur="2.5s" repeatCount="indefinite"/>
+        </circle>
+        <!-- Impact lines -->
+        <g opacity="0.4">
+          <line x1="68" y1="60" x2="63" y2="55" stroke="#e6edf3" stroke-width="0.8">
+            <animate attributeName="opacity" values="0;0.8;0" dur="2.5s" repeatCount="indefinite"/>
+          </line>
+          <line x1="78" y1="60" x2="83" y2="55" stroke="#e6edf3" stroke-width="0.8">
+            <animate attributeName="opacity" values="0;0.8;0" dur="2.5s" repeatCount="indefinite"/>
+          </line>
+          <line x1="73" y1="58" x2="73" y2="52" stroke="#e6edf3" stroke-width="0.8">
+            <animate attributeName="opacity" values="0;0.8;0" dur="2.5s" repeatCount="indefinite"/>
+          </line>
+        </g>
+        <text x="72" y="102" text-anchor="middle" font-size="8" fill="#6e7681">momentum transfer</text>
+        <text x="72" y="122" text-anchor="middle" font-size="8" fill="#6e7681">solids don't overlap</text>
+      </g>
+
+      <!-- Object Permanence -->
+      <g transform="translate(360,45)">
+        <rect x="0" y="0" width="145" height="130" rx="8" fill="#161b22" stroke="#1D9E75" stroke-width="1.2"/>
+        <text x="72" y="22" text-anchor="middle" font-size="11" fill="#1D9E75" font-weight="600">Permanence</text>
+        <!-- Object going behind occluder -->
+        <rect x="55" y="40" width="35" height="65" rx="2" fill="#30363d" stroke="#484f58" stroke-width="0.5"/>
+        <text x="72" y="75" text-anchor="middle" font-size="7" fill="#6e7681">wall</text>
+        <circle cx="30" cy="65" r="8" fill="#1D9E75" opacity="0.7">
+          <animate attributeName="cx" values="30;50;30" dur="3s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.7;0.2;0.7" dur="3s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="115" cy="65" r="8" fill="#1D9E75" opacity="0.2" stroke="#1D9E75" stroke-width="0.5" stroke-dasharray="2 2">
+          <animate attributeName="opacity" values="0.2;0.6;0.2" dur="3s" repeatCount="indefinite"/>
+        </circle>
+        <text x="72" y="122" text-anchor="middle" font-size="8" fill="#6e7681">objects persist unseen</text>
+      </g>
+
+      <!-- Material Properties -->
+      <g transform="translate(525,45)">
+        <rect x="0" y="0" width="145" height="130" rx="8" fill="#161b22" stroke="#E3B341" stroke-width="1.2"/>
+        <text x="72" y="22" text-anchor="middle" font-size="11" fill="#E3B341" font-weight="600">Materials</text>
+        <!-- Rigid vs deformable -->
+        <rect x="20" y="45" width="24" height="24" rx="2" fill="#E3B341" opacity="0.5"/>
+        <text x="32" y="84" text-anchor="middle" font-size="7" fill="#6e7681">rigid</text>
+        <!-- Soft blob -->
+        <ellipse cx="100" cy="57" rx="18" ry="12" fill="#E3B341" opacity="0.3">
+          <animate attributeName="ry" values="12;15;12" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="rx" values="18;15;18" dur="2s" repeatCount="indefinite"/>
+        </ellipse>
+        <text x="100" y="84" text-anchor="middle" font-size="7" fill="#6e7681">soft</text>
+        <text x="72" y="105" text-anchor="middle" font-size="8" fill="#6e7681">bounce, deform,</text>
+        <text x="72" y="118" text-anchor="middle" font-size="8" fill="#6e7681">break, flow</text>
+      </g>
+
+      <!-- Bottom insight -->
+      <g transform="translate(100,200)">
+        <rect x="0" y="0" width="500" height="65" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+        <text x="250" y="22" text-anchor="middle" font-size="11" fill="#A371F7" font-weight="600">No physics engine. No equations. No labels.</text>
+        <text x="250" y="42" text-anchor="middle" font-size="10" fill="#8b949e">These concepts emerge from predicting millions of video frames —</text>
+        <text x="250" y="56" text-anchor="middle" font-size="10" fill="#8b949e">the model discovers physics because it needs physics to predict accurately.</text>
+      </g>
+
+      <text x="350" y="340" text-anchor="middle" font-size="10" fill="#484f58">emergent physical reasoning from self-supervised video prediction</text>
+    `;
+  }
+
+  else if (step === 3) {
+    svg.innerHTML = `
+      <!-- Novel scene input -->
+      <g transform="translate(20,40)">
+        <rect x="0" y="0" width="130" height="100" rx="6" fill="#161b22" stroke="#58a6ff" stroke-width="1.2"/>
+        <text x="65" y="18" text-anchor="middle" font-size="10" fill="#58a6ff" font-weight="500">Novel Scene</text>
+        <!-- Table with objects -->
+        <rect x="15" y="55" width="100" height="4" rx="1" fill="#30363d"/>
+        <circle cx="45" cy="47" r="8" fill="#D85A30" opacity="0.7"/>
+        <text x="45" y="50" text-anchor="middle" font-size="6" fill="#e6edf3">ball</text>
+        <rect x="70" y="38" width="16" height="17" rx="2" fill="#1D9E75" opacity="0.6"/>
+        <text x="78" y="50" text-anchor="middle" font-size="6" fill="#e6edf3">cup</text>
+        <!-- Edge indicator -->
+        <line x1="100" y1="55" x2="115" y2="55" stroke="#484f58" stroke-width="0.5" stroke-dasharray="2 1"/>
+        <text x="65" y="82" text-anchor="middle" font-size="8" fill="#6e7681">ball near table edge</text>
+        <text x="65" y="108" text-anchor="middle" font-size="8" fill="#6e7681">never seen before</text>
+      </g>
+
+      <!-- Arrow -->
+      <line x1="155" y1="90" x2="195" y2="90" stroke="#484f58" stroke-width="1" stroke-dasharray="3 2"/>
+      <polygon points="195,87 201,90 195,93" fill="#484f58"/>
+
+      <!-- Model with physics priors -->
+      <g transform="translate(205,30)">
+        <rect x="0" y="0" width="120" height="120" rx="10" fill="#161b22" stroke="#A371F7" stroke-width="1.5"/>
+        <text x="60" y="22" text-anchor="middle" font-size="10" fill="#A371F7" font-weight="600">Learned</text>
+        <text x="60" y="36" text-anchor="middle" font-size="10" fill="#A371F7" font-weight="600">Physics</text>
+        <circle cx="60" cy="75" r="25" fill="none" stroke="#A371F7" stroke-width="0.5" opacity="0.3">
+          <animate attributeName="r" values="25;30;25" dur="2.5s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.3;0.5;0.3" dur="2.5s" repeatCount="indefinite"/>
+        </circle>
+        <text x="60" y="72" text-anchor="middle" font-size="8" fill="#A371F7">gravity</text>
+        <text x="60" y="84" text-anchor="middle" font-size="8" fill="#A371F7">collisions</text>
+        <text x="60" y="112" text-anchor="middle" font-size="8" fill="#6e7681">video-trained</text>
+      </g>
+
+      <!-- Arrow -->
+      <line x1="330" y1="90" x2="370" y2="90" stroke="#484f58" stroke-width="1" stroke-dasharray="3 2"/>
+      <polygon points="370,87 376,90 370,93" fill="#484f58"/>
+
+      <!-- Predictions fan out -->
+      <g transform="translate(380,15)">
+        <text x="90" y="12" text-anchor="middle" font-size="10" fill="#58a6ff" font-weight="600">Predicted outcomes</text>
+
+        <!-- Prediction: ball falls -->
+        <g transform="translate(0,25)">
+          <rect x="0" y="0" width="190" height="42" rx="6" fill="#161b22" stroke="#1D9E75" stroke-width="1.2"/>
+          <circle cx="22" cy="21" r="6" fill="#D85A30" opacity="0.7"/>
+          <path d="M28,21 L42,28 L56,32" stroke="#D85A30" stroke-width="1.5" stroke-dasharray="3 2" fill="none"/>
+          <circle cx="56" cy="32" r="4" fill="#D85A30" opacity="0.4"/>
+          <text x="115" y="18" text-anchor="middle" font-size="9" fill="#1D9E75" font-weight="500">ball falls off edge</text>
+          <text x="115" y="33" text-anchor="middle" font-size="8" fill="#6e7681">gravity + no support</text>
+        </g>
+
+        <!-- Prediction: cup stays -->
+        <g transform="translate(0,78)">
+          <rect x="0" y="0" width="190" height="42" rx="6" fill="#161b22" stroke="#484f58" stroke-width="1"/>
+          <rect x="16" y="12" width="12" height="15" rx="2" fill="#1D9E75" opacity="0.5"/>
+          <text x="115" y="18" text-anchor="middle" font-size="9" fill="#8b949e" font-weight="500">cup remains stable</text>
+          <text x="115" y="33" text-anchor="middle" font-size="8" fill="#6e7681">supported by table</text>
+        </g>
+
+        <!-- Prediction: ball hits ground -->
+        <g transform="translate(0,131)">
+          <rect x="0" y="0" width="190" height="42" rx="6" fill="#161b22" stroke="#D85A30" stroke-width="1"/>
+          <circle cx="22" cy="28" r="6" fill="#D85A30" opacity="0.7"/>
+          <g opacity="0.5">
+            <line x1="15" y1="34" x2="10" y2="38" stroke="#D85A30" stroke-width="0.8"/>
+            <line x1="22" y1="34" x2="22" y2="40" stroke="#D85A30" stroke-width="0.8"/>
+            <line x1="29" y1="34" x2="34" y2="38" stroke="#D85A30" stroke-width="0.8"/>
+          </g>
+          <text x="115" y="18" text-anchor="middle" font-size="9" fill="#D85A30" font-weight="500">impact + bounce</text>
+          <text x="115" y="33" text-anchor="middle" font-size="8" fill="#6e7681">collision dynamics</text>
+        </g>
+      </g>
+
+      <!-- Bottom label -->
+      <g transform="translate(100,250)">
+        <rect x="0" y="0" width="500" height="45" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+        <text x="250" y="18" text-anchor="middle" font-size="11" fill="#1D9E75" font-weight="600">Zero-shot physical reasoning</text>
+        <text x="250" y="36" text-anchor="middle" font-size="10" fill="#6e7681">the model has never seen this exact scene, but its physics priors generalize</text>
+      </g>
+
+      <text x="350" y="340" text-anchor="middle" font-size="10" fill="#484f58">learned intuition replaces hand-coded physics</text>
+    `;
+  }
+
+  else if (step === 4) {
+    svg.innerHTML = `
+      <!-- Left: traditional approach -->
+      <g transform="translate(20,30)">
+        <rect x="0" y="0" width="200" height="200" rx="10" fill="#161b22" stroke="#484f58" stroke-width="1" stroke-dasharray="4 2"/>
+        <text x="100" y="22" text-anchor="middle" font-size="11" fill="#8b949e" font-weight="600">Traditional Approach</text>
+
+        <rect x="15" y="38" width="170" height="28" rx="4" fill="#1c2333" stroke="#484f58" stroke-width="0.5"/>
+        <text x="100" y="57" text-anchor="middle" font-size="9" fill="#6e7681">hand-coded physics engine</text>
+
+        <rect x="15" y="74" width="170" height="28" rx="4" fill="#1c2333" stroke="#484f58" stroke-width="0.5"/>
+        <text x="100" y="93" text-anchor="middle" font-size="9" fill="#6e7681">rigid body dynamics eqs</text>
+
+        <rect x="15" y="110" width="170" height="28" rx="4" fill="#1c2333" stroke="#484f58" stroke-width="0.5"/>
+        <text x="100" y="129" text-anchor="middle" font-size="9" fill="#6e7681">material parameters</text>
+
+        <rect x="15" y="146" width="170" height="28" rx="4" fill="#1c2333" stroke="#484f58" stroke-width="0.5"/>
+        <text x="100" y="165" text-anchor="middle" font-size="9" fill="#6e7681">contact models</text>
+
+        <text x="100" y="192" text-anchor="middle" font-size="9" fill="#D85A30">brittle, sim-to-real gap</text>
+      </g>
+
+      <!-- Arrow / VS -->
+      <text x="260" y="135" text-anchor="middle" font-size="16" fill="#6e7681">vs</text>
+
+      <!-- Right: video-learned approach -->
+      <g transform="translate(300,30)">
+        <rect x="0" y="0" width="200" height="200" rx="10" fill="#161b22" stroke="#1D9E75" stroke-width="1.5"/>
+        <text x="100" y="22" text-anchor="middle" font-size="11" fill="#1D9E75" font-weight="600">Video-Learned Physics</text>
+
+        <!-- Video frames flowing in -->
+        <g transform="translate(15,38)">
+          <rect x="0" y="0" width="40" height="28" rx="3" fill="#1c2333" stroke="#58a6ff" stroke-width="0.5"/>
+          <rect x="45" y="0" width="40" height="28" rx="3" fill="#1c2333" stroke="#58a6ff" stroke-width="0.5"/>
+          <rect x="90" y="0" width="40" height="28" rx="3" fill="#1c2333" stroke="#58a6ff" stroke-width="0.5"/>
+          <rect x="135" y="0" width="35" height="28" rx="3" fill="#1c2333" stroke="#58a6ff" stroke-width="0.5"/>
+          <text x="85" y="18" text-anchor="middle" font-size="7" fill="#58a6ff">video data</text>
+        </g>
+
+        <line x1="100" y1="72" x2="100" y2="85" stroke="#484f58" stroke-width="1"/>
+        <polygon points="97,85 100,91 103,85" fill="#484f58"/>
+
+        <!-- World model -->
+        <g transform="translate(25,95)">
+          <rect x="0" y="0" width="150" height="55" rx="8" fill="#1c2333" stroke="#A371F7" stroke-width="1"/>
+          <text x="75" y="20" text-anchor="middle" font-size="10" fill="#A371F7" font-weight="600">World Model</text>
+          <text x="75" y="36" text-anchor="middle" font-size="9" fill="#6e7681">physics emerge from</text>
+          <text x="75" y="48" text-anchor="middle" font-size="9" fill="#6e7681">video prediction</text>
+        </g>
+
+        <text x="100" y="172" text-anchor="middle" font-size="9" fill="#1D9E75" font-weight="600">real-world fidelity</text>
+        <text x="100" y="192" text-anchor="middle" font-size="9" fill="#1D9E75">no sim-to-real gap</text>
+      </g>
+
+      <!-- Robot at bottom -->
+      <g transform="translate(520,65)">
+        <rect x="0" y="20" width="50" height="40" rx="6" fill="#1c2333" stroke="#58a6ff" stroke-width="1.5"/>
+        <rect x="12" y="8" width="26" height="18" rx="4" fill="#1c2333" stroke="#58a6ff" stroke-width="1"/>
+        <circle cx="20" cy="16" r="3" fill="#58a6ff" opacity="0.8"/>
+        <circle cx="30" cy="16" r="3" fill="#58a6ff" opacity="0.8"/>
+        <rect x="8" y="60" width="12" height="6" rx="2" fill="#30363d"/>
+        <rect x="30" y="60" width="12" height="6" rx="2" fill="#30363d"/>
+      </g>
+
+      <!-- Arrow from world model to robot -->
+      <path d="M500,130 C520,130 535,110 545,105" stroke="#1D9E75" stroke-width="1.5" fill="none" stroke-dasharray="5 3">
+        <animate attributeName="stroke-dashoffset" from="20" to="0" dur="1s" repeatCount="indefinite"/>
+      </path>
+
+      <!-- Benefits -->
+      <g transform="translate(510,150)">
+        <text x="45" y="0" text-anchor="middle" font-size="9" fill="#1D9E75" font-weight="500">+ real physics</text>
+        <text x="45" y="16" text-anchor="middle" font-size="9" fill="#1D9E75" font-weight="500">+ generalizes</text>
+        <text x="45" y="32" text-anchor="middle" font-size="9" fill="#1D9E75" font-weight="500">+ no hand-tuning</text>
+      </g>
+
+      <!-- Bottom: systems using this -->
+      <g transform="translate(40,260)">
+        <rect x="0" y="0" width="620" height="50" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+        <text x="310" y="20" text-anchor="middle" font-size="11" fill="#58a6ff" font-weight="600">Systems using video-learned physics</text>
+        <text x="310" y="38" text-anchor="middle" font-size="10" fill="#6e7681">NVIDIA Cosmos  ·  UniSim  ·  Genie  ·  World Labs  ·  SORA for Robotics</text>
+      </g>
+
+      <text x="350" y="340" text-anchor="middle" font-size="10" fill="#484f58">video-learned world models bridge the sim-to-real gap by learning real physics</text>
+    `;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') navigate(1);
+  if (e.key === 'ArrowLeft') navigate(-1);
+});
+
+goTo(0);
+setTimeout(() => { const s = document.getElementById('viz'); s.classList.add('visible'); }, 50);
+setTimeout(() => { if (current === 0) togglePlay(); }, 3000);
+</script>
+</body>
+</html>

@@ -17,6 +17,7 @@ Interactive animations explaining core concepts in robotics and embodied intelli
 | Diffusion Policy | Learning | How denoising diffusion refines random noise into smooth action trajectories, handling multimodal demonstrations |
 | Flow Matching | Learning | How flow matching learns straight-line velocity fields to transport noise into action distributions — a faster, simpler alternative to diffusion |
 | World Models — Predict Before You Act | Learning | How robots imagine multiple futures in latent space, score each outcome, and pick the best action before moving |
+| Learning Physics from Video | Learning | How watching billions of internet videos teaches robots gravity, collisions, and object permanence — no physics engine required |
 
 ## Features
 
@@ -37,7 +38,7 @@ Planned animations, roughly ordered by pedagogical flow. Contributions welcome!
 
 ### World Models
 - [ ] **World Models — Predict Before You Act** — The core idea: robot observes state, imagines multiple futures in latent space, scores each outcome, and picks the best action
-- [ ] **Learning Physics from Video** — How watching internet-scale video teaches robots gravity, collisions, and object permanence — no physics engine needed
+- [x] **Learning Physics from Video** — How watching internet-scale video teaches robots gravity, collisions, and object permanence — no physics engine needed
 - [ ] **Closed-Loop World Model Control** — The real-time observe → predict → act → re-observe cycle — how continuous re-planning handles the unexpected
 
 ### Planning & Control
