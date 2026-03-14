@@ -16,6 +16,7 @@ Interactive animations explaining core concepts in robotics and embodied intelli
 | Video Action Models & Latent Space | Learning | How video-conditioned policies use temporal context and latent space predictions to generate robot actions |
 | Diffusion Policy | Learning | How denoising diffusion refines random noise into smooth action trajectories, handling multimodal demonstrations |
 | Flow Matching | Learning | How flow matching learns straight-line velocity fields to transport noise into action distributions — a faster, simpler alternative to diffusion |
+| World Models — Predict Before You Act | Learning | How robots imagine multiple futures in latent space, score each outcome, and pick the best action before moving |
 
 ## Features
 
@@ -33,6 +34,11 @@ Planned animations, roughly ordered by pedagogical flow. Contributions welcome!
 - [ ] **Visual Encoders Compared** — CNN vs ViT vs DINOv2: how each architecture turns pixels into features, and why foundation vision models changed robotics
 - [ ] **Point Cloud Processing** — From raw depth sensor → voxel grid → PointNet features. Show how 3D understanding feeds into grasp planning
 - [ ] **Spatial Action Maps** — How pixel-space affordance maps let robots decide *where* to act directly from images
+
+### World Models
+- [ ] **World Models — Predict Before You Act** — The core idea: robot observes state, imagines multiple futures in latent space, scores each outcome, and picks the best action
+- [ ] **Learning Physics from Video** — How watching internet-scale video teaches robots gravity, collisions, and object permanence — no physics engine needed
+- [ ] **Closed-Loop World Model Control** — The real-time observe → predict → act → re-observe cycle — how continuous re-planning handles the unexpected
 
 ### Planning & Control
 - [ ] **MPC vs Learned Policies** — Model Predictive Control re-plans every step; a learned policy runs open-loop. Animated side-by-side on the same task
