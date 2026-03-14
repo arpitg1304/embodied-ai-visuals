@@ -37,7 +37,7 @@ Planned animations, roughly ordered by pedagogical flow. Contributions welcome!
 - [ ] **Spatial Action Maps** — How pixel-space affordance maps let robots decide *where* to act directly from images
 
 ### World Models
-- [ ] **World Models — Predict Before You Act** — The core idea: robot observes state, imagines multiple futures in latent space, scores each outcome, and picks the best action
+- [x] **World Models — Predict Before You Act** — The core idea: robot observes state, imagines multiple futures in latent space, scores each outcome, and picks the best action
 - [x] **Learning Physics from Video** — How watching internet-scale video teaches robots gravity, collisions, and object permanence — no physics engine needed
 - [ ] **Closed-Loop World Model Control** — The real-time observe → predict → act → re-observe cycle — how continuous re-planning handles the unexpected
 
