@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Action Chunking — Predict Trajectories, Not Steps</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#e6edf3;padding:24px 32px;margin:0;min-height:100vh}
+
+.header{text-align:center;margin-bottom:20px}
+.header h1{font-size:22px;font-weight:700;background:linear-gradient(135deg,#e6edf3,#58a6ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px}
+.header p{color:#8b949e;font-size:13px}
+
+.controls{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:16px}
+.step-dots{display:flex;gap:6px}
+.dot{width:10px;height:10px;border-radius:50%;background:#30363d;cursor:pointer;border:none;padding:0;transition:all 0.2s}
+.dot.active{background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,0.4)}
+.nav-btn{background:none;border:1px solid #30363d;color:#8b949e;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
+.nav-btn:hover{border-color:#58a6ff;color:#58a6ff}
+.play-btn{background:none;border:1px solid #30363d;color:#8b949e;border-radius:6px;height:32px;padding:0 12px;cursor:pointer;font-size:12px;font-family:inherit;transition:all 0.15s}
+.play-btn:hover{border-color:#58a6ff;color:#58a6ff}
+.play-btn.playing{border-color:#1D9E75;color:#1D9E75}
+
+.step-info{text-align:center;margin-bottom:16px;min-height:52px}
+.step-title{font-size:16px;font-weight:600;margin-bottom:4px;color:#e6edf3}
+.step-desc{font-size:13px;color:#8b949e;max-width:600px;margin:0 auto;line-height:1.5}
+
+.canvas-wrap{display:flex;justify-content:center}
+.canvas-wrap svg{max-width:100%;height:auto;opacity:0;transition:opacity 0.4s ease}
+.canvas-wrap svg.visible{opacity:1}
+
+.progress{height:2px;background:#1c2333;border-radius:1px;overflow:hidden;max-width:500px;margin:0 auto 12px}
+.progress-fill{height:100%;background:#58a6ff;transition:width 0.3s ease}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Action Chunking — Predict Trajectories, Not Steps</h1>
+  <p>Why predicting K actions at once makes robot motion smooth and reliable</p>
+</div>
+
+<div class="progress"><div class="progress-fill" id="progress"></div></div>
+
+<div class="controls">
+  <button class="nav-btn" onclick="navigate(-1)">&#8249;</button>
+  <div class="step-dots" id="dots"></div>
+  <button class="nav-btn" onclick="navigate(1)">&#8250;</button>
+  <button class="play-btn" id="play-btn" onclick="togglePlay()">&#9654; Auto</button>
+</div>
+
+<div class="step-info">
+  <div class="step-title" id="step-title"></div>
+  <div class="step-desc" id="step-desc"></div>
+</div>
+
+<div class="canvas-wrap">
+  <svg id="viz" viewBox="0 0 700 360" fill="none" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<script>
+const STEPS = [
+  {
+    title: 'Step 1: The Single-Step Problem',
+    desc: 'Traditional policies predict one action at a time. Each prediction is independent — small errors compound, and the robot\'s motion becomes jerky and inconsistent.',
+  },
+  {
+    title: 'Step 2: Predict a Chunk of Actions',
+    desc: 'Instead of one action, predict K future actions at once (e.g., the next 50-100 timesteps). Each chunk forms a coherent trajectory segment with temporal consistency built in.',
+  },
+  {
+    title: 'Step 3: The Transformer Architecture',
+    desc: 'A transformer takes the current observation and outputs an entire action sequence. The self-attention mechanism ensures each action in the chunk is consistent with every other.',
+  },
+  {
+    title: 'Step 4: Temporal Ensembling',
+    desc: 'Chunks overlap — at each timestep, multiple past predictions cover the same moment. Averaging them with exponential weighting produces ultra-smooth motion and filters out noise.',
+  },
+  {
+    title: 'Step 5: The Result',
+    desc: 'Action chunking powers ACT, Diffusion Policy, and π0. It\'s the reason modern robot policies produce smooth, human-like motion instead of jerky one-step reactions.',
+  },
+];
+
+let current = 0;
+let autoTimer = null;
+let playing = false;
+
+const dotsEl = document.getElementById('dots');
+STEPS.forEach((_, i) => {
+  const d = document.createElement('button');
+  d.className = 'dot' + (i === 0 ? ' active' : '');
+  d.onclick = () => { stopPlay(); goTo(i); };
+  dotsEl.appendChild(d);
+});
+
+function navigate(dir) {
+  stopPlay();
+  goTo(Math.max(0, Math.min(STEPS.length - 1, current + dir)));
+}
+
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  playing = true;
+  document.getElementById('play-btn').innerHTML = '&#9208; Pause';
+  document.getElementById('play-btn').classList.add('playing');
+  advanceAuto();
+}
+
+function stopPlay() {
+  playing = false;
+  clearTimeout(autoTimer);
+  document.getElementById('play-btn').innerHTML = '&#9654; Auto';
+  document.getElementById('play-btn').classList.remove('playing');
+}
+
+function advanceAuto() {
+  if (!playing) return;
+  const next = (current + 1) % STEPS.length;
+  goTo(next);
+  autoTimer = setTimeout(advanceAuto, 5000);
+}
+
+function goTo(idx) {
+  current = idx;
+  document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+  document.getElementById('step-title').textContent = STEPS[idx].title;
+  document.getElementById('step-desc').textContent = STEPS[idx].desc;
+  document.getElementById('progress').style.width = ((idx + 1) / STEPS.length * 100) + '%';
+
+  const svg = document.getElementById('viz');
+  svg.classList.remove('visible');
+  setTimeout(() => {
+    renderStep(idx);
+    svg.classList.add('visible');
+  }, 200);
+}
+
+function renderStep(step) {
+  const svg = document.getElementById('viz');
+
+  const robot = (color = '#58a6ff') => `
+    <g>
+      <rect x="0" y="20" width="50" height="40" rx="6" fill="#1c2333" stroke="${color}" stroke-width="1.5"/>
+      <rect x="12" y="8" width="26" height="18" rx="4" fill="#1c2333" stroke="${color}" stroke-width="1"/>
+      <circle cx="20" cy="16" r="3" fill="${color}" opacity="0.8"/>
+      <circle cx="30" cy="16" r="3" fill="${color}" opacity="0.8"/>
+      <rect x="8" y="60" width="12" height="6" rx="2" fill="#30363d"/>
+      <rect x="30" y="60" width="12" height="6" rx="2" fill="#30363d"/>
+    </g>
+  `;
+
+  if (step === 0) {
+    // Single-step problem: jerky motion
+    svg.innerHTML = `
+      <g transform="translate(30,80)">${robot('#D85A30')}</g>
+
+      <!-- Single action arrows - jerky, inconsistent -->
+      <text x="350" y="30" text-anchor="middle" font-size="12" fill="#D85A30" font-weight="600">Single-Step Prediction</text>
+      <text x="350" y="48" text-anchor="middle" font-size="10" fill="#6e7681">one action at a time → jerky, compounding errors</text>
+
+      <!-- Timeline -->
+      <line x1="100" y1="130" x2="650" y2="130" stroke="#30363d" stroke-width="1.5"/>
+
+      <!-- Individual action predictions (each independent, noisy) -->
+      <g>
+        <circle cx="130" cy="130" r="5" fill="#D85A30" opacity="0.8"/>
+        <line x1="130" y1="130" x2="130" y2="96" stroke="#D85A30" stroke-width="1.5"/>
+        <polygon points="127,98 130,88 133,98" fill="#D85A30"/>
+        <text x="130" y="148" text-anchor="middle" font-size="7" fill="#6e7681">t</text>
+      </g>
+      <g>
+        <circle cx="195" cy="130" r="5" fill="#D85A30" opacity="0.8"/>
+        <line x1="195" y1="130" x2="202" y2="98" stroke="#D85A30" stroke-width="1.5"/>
+        <polygon points="199,100 205,90 207,101" fill="#D85A30"/>
+        <text x="195" y="148" text-anchor="middle" font-size="7" fill="#6e7681">t+1</text>
+      </g>
+      <g>
+        <circle cx="260" cy="130" r="5" fill="#D85A30" opacity="0.8"/>
+        <line x1="260" y1="130" x2="253" y2="100" stroke="#D85A30" stroke-width="1.5"/>
+        <polygon points="250,102 250,90 256,100" fill="#D85A30"/>
+        <text x="260" y="148" text-anchor="middle" font-size="7" fill="#6e7681">t+2</text>
+      </g>
+      <g>
+        <circle cx="325" cy="130" r="5" fill="#D85A30" opacity="0.8"/>
+        <line x1="325" y1="130" x2="332" y2="95" stroke="#D85A30" stroke-width="1.5"/>
+        <polygon points="329,97 335,87 336,98" fill="#D85A30"/>
+        <text x="325" y="148" text-anchor="middle" font-size="7" fill="#6e7681">t+3</text>
+      </g>
+      <g>
+        <circle cx="390" cy="130" r="5" fill="#D85A30" opacity="0.8"/>
+        <line x1="390" y1="130" x2="383" y2="102" stroke="#D85A30" stroke-width="1.5"/>
+        <polygon points="380,104 380,92 386,102" fill="#D85A30"/>
+        <text x="390" y="148" text-anchor="middle" font-size="7" fill="#6e7681">t+4</text>
+      </g>
+      <g>
+        <circle cx="455" cy="130" r="5" fill="#D85A30" opacity="0.8"/>
+        <line x1="455" y1="130" x2="460" y2="97" stroke="#D85A30" stroke-width="1.5"/>
+        <polygon points="457,99 463,89 464,100" fill="#D85A30"/>
+        <text x="455" y="148" text-anchor="middle" font-size="7" fill="#6e7681">t+5</text>
+      </g>
+
+      <!-- Resulting trajectory: jerky path -->
+      <text x="350" y="185" text-anchor="middle" font-size="10" fill="#8b949e">resulting end-effector trajectory:</text>
+      <path d="M100,240 L160,225 L210,248 L260,218 L320,245 L380,222 L440,250 L500,228 L560,248 L620,220" stroke="#D85A30" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- Error markers -->
+      <g opacity="0.5">
+        <circle cx="210" cy="248" r="8" fill="none" stroke="#D85A30" stroke-width="0.8" stroke-dasharray="2 2">
+          <animate attributeName="r" values="8;12;8" dur="2s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="320" cy="245" r="8" fill="none" stroke="#D85A30" stroke-width="0.8" stroke-dasharray="2 2">
+          <animate attributeName="r" values="8;12;8" dur="2s" repeatCount="indefinite" begin="0.5s"/>
+        </circle>
+        <circle cx="500" cy="228" r="8" fill="none" stroke="#D85A30" stroke-width="0.8" stroke-dasharray="2 2">
+          <animate attributeName="r" values="8;12;8" dur="2s" repeatCount="indefinite" begin="1s"/>
+        </circle>
+      </g>
+
+      <text x="350" y="290" text-anchor="middle" font-size="10" fill="#D85A30">&#x26A0; each prediction is independent — no temporal consistency</text>
+      <text x="350" y="340" text-anchor="middle" font-size="10" fill="#484f58">errors compound, motion is jerky, robot oscillates around the target</text>
+    `;
+  }
+
+  else if (step === 1) {
+    // Action chunking idea
+    svg.innerHTML = `
+      <text x="350" y="30" text-anchor="middle" font-size="12" fill="#1D9E75" font-weight="600">Action Chunking: Predict K Actions at Once</text>
+
+      <!-- Single step (crossed out) -->
+      <g transform="translate(40,55)">
+        <rect x="0" y="0" width="180" height="100" rx="8" fill="#161b22" stroke="#484f58" stroke-width="1" opacity="0.5"/>
+        <text x="90" y="22" text-anchor="middle" font-size="10" fill="#8b949e">Single-Step</text>
+        <text x="90" y="40" text-anchor="middle" font-size="9" fill="#6e7681">K = 1</text>
+        <!-- One box -->
+        <rect x="60" y="52" width="60" height="30" rx="4" fill="#D85A30" opacity="0.2" stroke="#D85A30" stroke-width="0.8"/>
+        <text x="90" y="72" text-anchor="middle" font-size="9" fill="#D85A30">a<tspan font-size="7" dy="3">t</tspan></text>
+        <!-- Cross -->
+        <line x1="10" y1="10" x2="170" y2="90" stroke="#D85A30" stroke-width="2" opacity="0.4"/>
+        <line x1="170" y1="10" x2="10" y2="90" stroke="#D85A30" stroke-width="2" opacity="0.4"/>
+      </g>
+
+      <!-- Arrow -->
+      <text x="265" y="108" text-anchor="middle" font-size="22" fill="#6e7681">&#8594;</text>
+
+      <!-- Action chunk -->
+      <g transform="translate(295,55)">
+        <rect x="0" y="0" width="370" height="100" rx="8" fill="#161b22" stroke="#1D9E75" stroke-width="1.5"/>
+        <text x="185" y="22" text-anchor="middle" font-size="10" fill="#1D9E75" font-weight="600">Action Chunk</text>
+        <text x="185" y="40" text-anchor="middle" font-size="9" fill="#6e7681">K = 10 (predict 10 future actions)</text>
+
+        <!-- K action boxes -->
+        <g transform="translate(10,52)">
+          <rect x="0" y="0" width="30" height="30" rx="3" fill="#1D9E75" opacity="0.3" stroke="#1D9E75" stroke-width="0.8"/>
+          <text x="15" y="19" text-anchor="middle" font-size="7" fill="#1D9E75">a<tspan font-size="5" dy="2">t</tspan></text>
+
+          <rect x="35" y="0" width="30" height="30" rx="3" fill="#1D9E75" opacity="0.35" stroke="#1D9E75" stroke-width="0.8"/>
+          <text x="50" y="19" text-anchor="middle" font-size="7" fill="#1D9E75">a<tspan font-size="5" dy="2">t+1</tspan></text>
+
+          <rect x="70" y="0" width="30" height="30" rx="3" fill="#1D9E75" opacity="0.4" stroke="#1D9E75" stroke-width="0.8"/>
+          <text x="85" y="19" text-anchor="middle" font-size="7" fill="#1D9E75">a<tspan font-size="5" dy="2">t+2</tspan></text>
+
+          <rect x="105" y="0" width="30" height="30" rx="3" fill="#1D9E75" opacity="0.45" stroke="#1D9E75" stroke-width="0.8"/>
+          <text x="120" y="19" text-anchor="middle" font-size="7" fill="#1D9E75">a<tspan font-size="5" dy="2">t+3</tspan></text>
+
+          <rect x="140" y="0" width="30" height="30" rx="3" fill="#1D9E75" opacity="0.5" stroke="#1D9E75" stroke-width="0.8"/>
+
+          <rect x="175" y="0" width="30" height="30" rx="3" fill="#1D9E75" opacity="0.55" stroke="#1D9E75" stroke-width="0.8"/>
+
+          <rect x="210" y="0" width="30" height="30" rx="3" fill="#1D9E75" opacity="0.6" stroke="#1D9E75" stroke-width="0.8"/>
+
+          <rect x="245" y="0" width="30" height="30" rx="3" fill="#1D9E75" opacity="0.65" stroke="#1D9E75" stroke-width="0.8"/>
+
+          <rect x="280" y="0" width="30" height="30" rx="3" fill="#1D9E75" opacity="0.7" stroke="#1D9E75" stroke-width="0.8"/>
+
+          <rect x="315" y="0" width="30" height="30" rx="3" fill="#1D9E75" opacity="0.8" stroke="#1D9E75" stroke-width="0.8"/>
+          <text x="330" y="19" text-anchor="middle" font-size="7" fill="#1D9E75">a<tspan font-size="5" dy="2">t+9</tspan></text>
+        </g>
+
+        <!-- Coherence bracket -->
+        <path d="M12,88 L355,88" stroke="#1D9E75" stroke-width="0.8" stroke-dasharray="3 2"/>
+        <text x="185" y="98" text-anchor="middle" font-size="8" fill="#1D9E75">temporally coherent</text>
+      </g>
+
+      <!-- Resulting trajectory: smooth -->
+      <text x="350" y="195" text-anchor="middle" font-size="10" fill="#8b949e">resulting trajectory from chunked prediction:</text>
+      <path d="M100,250 Q200,220 300,235 Q400,250 500,230 Q580,218 640,225" stroke="#1D9E75" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <!-- Smooth glow -->
+      <path d="M100,250 Q200,220 300,235 Q400,250 500,230 Q580,218 640,225" stroke="#1D9E75" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.15">
+        <animate attributeName="opacity" values="0.1;0.25;0.1" dur="2s" repeatCount="indefinite"/>
+      </path>
+
+      <text x="350" y="300" text-anchor="middle" font-size="11" fill="#1D9E75" font-weight="600">smooth, consistent, human-like motion</text>
+      <text x="350" y="340" text-anchor="middle" font-size="10" fill="#484f58">each chunk is planned as a whole — actions within a chunk are guaranteed to be consistent</text>
+    `;
+  }
+
+  else if (step === 2) {
+    // Transformer architecture
+    svg.innerHTML = `
+      <!-- Observation input -->
+      <g transform="translate(20,80)">
+        <rect x="0" y="0" width="100" height="75" rx="6" fill="#161b22" stroke="#58a6ff" stroke-width="1.2"/>
+        <text x="50" y="18" text-anchor="middle" font-size="10" fill="#58a6ff" font-weight="500">Observation</text>
+        <!-- Camera icon -->
+        <rect x="22" y="28" width="25" height="18" rx="2" fill="#1c2333" stroke="#58a6ff" stroke-width="0.5"/>
+        <circle cx="34" cy="37" r="5" fill="#58a6ff" opacity="0.3"/>
+        <!-- Joint state -->
+        <text x="70" y="38" font-size="7" fill="#6e7681">q, dq</text>
+        <text x="50" y="62" text-anchor="middle" font-size="8" fill="#6e7681">image + joints</text>
+        <text x="50" y="90" text-anchor="middle" font-size="8" fill="#6e7681">at time t</text>
+      </g>
+
+      <!-- Arrow -->
+      <line x1="125" y1="118" x2="170" y2="118" stroke="#484f58" stroke-width="1" stroke-dasharray="3 2"/>
+      <polygon points="170,115 176,118 170,121" fill="#484f58"/>
+
+      <!-- Encoder -->
+      <g transform="translate(180,85)">
+        <rect x="0" y="0" width="80" height="65" rx="8" fill="#161b22" stroke="#A371F7" stroke-width="1.2"/>
+        <text x="40" y="20" text-anchor="middle" font-size="9" fill="#A371F7" font-weight="600">Encoder</text>
+        <text x="40" y="36" text-anchor="middle" font-size="8" fill="#6e7681">ViT / CNN</text>
+        <g opacity="0.4">
+          <rect x="10" y="42" width="60" height="4" rx="1" fill="#A371F7"/>
+          <rect x="10" y="48" width="60" height="4" rx="1" fill="#A371F7" opacity="0.6"/>
+          <rect x="10" y="54" width="60" height="4" rx="1" fill="#A371F7" opacity="0.3"/>
+        </g>
+      </g>
+
+      <!-- Arrow -->
+      <line x1="265" y1="118" x2="295" y2="118" stroke="#484f58" stroke-width="1" stroke-dasharray="3 2"/>
+      <polygon points="295,115 301,118 295,121" fill="#484f58"/>
+
+      <!-- Transformer Decoder -->
+      <g transform="translate(305,40)">
+        <rect x="0" y="0" width="170" height="155" rx="10" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+        <text x="85" y="22" text-anchor="middle" font-size="11" fill="#58a6ff" font-weight="700">Transformer</text>
+        <text x="85" y="38" text-anchor="middle" font-size="9" fill="#6e7681">decoder with self-attention</text>
+
+        <!-- Attention pattern -->
+        <g transform="translate(15,50)">
+          <!-- Query tokens (action queries) -->
+          <rect x="0" y="0" width="18" height="18" rx="2" fill="#1D9E75" opacity="0.3" stroke="#1D9E75" stroke-width="0.5"/>
+          <rect x="22" y="0" width="18" height="18" rx="2" fill="#1D9E75" opacity="0.4" stroke="#1D9E75" stroke-width="0.5"/>
+          <rect x="44" y="0" width="18" height="18" rx="2" fill="#1D9E75" opacity="0.5" stroke="#1D9E75" stroke-width="0.5"/>
+          <rect x="66" y="0" width="18" height="18" rx="2" fill="#1D9E75" opacity="0.6" stroke="#1D9E75" stroke-width="0.5"/>
+          <text x="70" y="32" font-size="7" fill="#6e7681">action queries</text>
+
+          <!-- Attention lines -->
+          <line x1="9" y1="18" x2="31" y2="55" stroke="#58a6ff" stroke-width="0.5" opacity="0.3"/>
+          <line x1="31" y1="18" x2="53" y2="55" stroke="#58a6ff" stroke-width="0.5" opacity="0.3"/>
+          <line x1="53" y1="18" x2="9" y2="55" stroke="#58a6ff" stroke-width="0.5" opacity="0.3"/>
+          <line x1="75" y1="18" x2="53" y2="55" stroke="#58a6ff" stroke-width="0.5" opacity="0.3"/>
+          <line x1="9" y1="18" x2="9" y2="55" stroke="#58a6ff" stroke-width="0.8" opacity="0.5">
+            <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite"/>
+          </line>
+          <line x1="31" y1="18" x2="31" y2="55" stroke="#58a6ff" stroke-width="0.8" opacity="0.5">
+            <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite" begin="0.2s"/>
+          </line>
+          <line x1="53" y1="18" x2="53" y2="55" stroke="#58a6ff" stroke-width="0.8" opacity="0.5">
+            <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite" begin="0.4s"/>
+          </line>
+
+          <!-- Cross attention label -->
+          <rect x="92" y="20" width="46" height="28" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="0.5"/>
+          <text x="115" y="32" text-anchor="middle" font-size="7" fill="#58a6ff">self</text>
+          <text x="115" y="42" text-anchor="middle" font-size="7" fill="#58a6ff">attn</text>
+
+          <!-- Output tokens -->
+          <rect x="0" y="55" width="18" height="18" rx="2" fill="#58a6ff" opacity="0.15" stroke="#58a6ff" stroke-width="0.5"/>
+          <rect x="22" y="55" width="18" height="18" rx="2" fill="#58a6ff" opacity="0.15" stroke="#58a6ff" stroke-width="0.5"/>
+          <rect x="44" y="55" width="18" height="18" rx="2" fill="#58a6ff" opacity="0.15" stroke="#58a6ff" stroke-width="0.5"/>
+          <rect x="66" y="55" width="18" height="18" rx="2" fill="#58a6ff" opacity="0.15" stroke="#58a6ff" stroke-width="0.5"/>
+          <text x="70" y="88" font-size="7" fill="#6e7681">output features</text>
+        </g>
+      </g>
+
+      <!-- Arrow -->
+      <line x1="480" y1="118" x2="510" y2="118" stroke="#484f58" stroke-width="1" stroke-dasharray="3 2"/>
+      <polygon points="510,115 516,118 510,121" fill="#484f58"/>
+
+      <!-- Output: Action chunk -->
+      <g transform="translate(520,50)">
+        <rect x="0" y="0" width="155" height="135" rx="8" fill="#161b22" stroke="#1D9E75" stroke-width="1.5"/>
+        <text x="77" y="20" text-anchor="middle" font-size="10" fill="#1D9E75" font-weight="600">Action Chunk</text>
+        <text x="77" y="36" text-anchor="middle" font-size="8" fill="#6e7681">K = 10 actions</text>
+
+        <!-- Action sequence -->
+        <g transform="translate(15,45)">
+          <rect x="0" y="0" width="125" height="12" rx="2" fill="#1D9E75" opacity="0.2"/>
+          <text x="62" y="10" text-anchor="middle" font-size="7" fill="#1D9E75">a<tspan font-size="5" dy="1">t</tspan><tspan dy="-1"> = [dx, dy, dz, ...]</tspan></text>
+
+          <rect x="0" y="16" width="125" height="12" rx="2" fill="#1D9E75" opacity="0.25"/>
+          <text x="62" y="26" text-anchor="middle" font-size="7" fill="#1D9E75">a<tspan font-size="5" dy="1">t+1</tspan></text>
+
+          <rect x="0" y="32" width="125" height="12" rx="2" fill="#1D9E75" opacity="0.3"/>
+          <text x="62" y="42" text-anchor="middle" font-size="7" fill="#1D9E75">a<tspan font-size="5" dy="1">t+2</tspan></text>
+
+          <text x="62" y="56" text-anchor="middle" font-size="9" fill="#6e7681">...</text>
+
+          <rect x="0" y="62" width="125" height="12" rx="2" fill="#1D9E75" opacity="0.7"/>
+          <text x="62" y="72" text-anchor="middle" font-size="7" fill="#1D9E75">a<tspan font-size="5" dy="1">t+9</tspan></text>
+        </g>
+      </g>
+
+      <!-- Key insight -->
+      <g transform="translate(100,230)">
+        <rect x="0" y="0" width="500" height="55" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+        <text x="250" y="20" text-anchor="middle" font-size="11" fill="#58a6ff" font-weight="600">Self-attention is the key</text>
+        <text x="250" y="40" text-anchor="middle" font-size="10" fill="#8b949e">every action in the chunk attends to every other — ensuring temporal coherence</text>
+      </g>
+
+      <text x="350" y="340" text-anchor="middle" font-size="10" fill="#484f58">one forward pass → one complete trajectory segment</text>
+    `;
+  }
+
+  else if (step === 3) {
+    // Temporal ensembling
+    svg.innerHTML = `
+      <text x="350" y="30" text-anchor="middle" font-size="12" fill="#A371F7" font-weight="600">Temporal Ensembling: Overlapping Chunks</text>
+
+      <!-- Timeline -->
+      <line x1="50" y1="210" x2="660" y2="210" stroke="#30363d" stroke-width="1.5"/>
+      <g font-size="8" fill="#6e7681" text-anchor="middle">
+        <text x="100" y="225">t</text>
+        <text x="170" y="225">t+1</text>
+        <text x="240" y="225">t+2</text>
+        <text x="310" y="225">t+3</text>
+        <text x="380" y="225">t+4</text>
+        <text x="450" y="225">t+5</text>
+        <text x="520" y="225">t+6</text>
+        <text x="590" y="225">t+7</text>
+      </g>
+
+      <!-- Chunk 1 (predicted at t) -->
+      <g transform="translate(80,55)">
+        <rect x="0" y="0" width="350" height="32" rx="4" fill="#1D9E75" opacity="0.15" stroke="#1D9E75" stroke-width="1"/>
+        <text x="10" y="20" font-size="8" fill="#1D9E75" font-weight="600">chunk @ t</text>
+        <g transform="translate(90,6)">
+          <rect x="0" y="0" width="24" height="20" rx="2" fill="#1D9E75" opacity="0.4"/>
+          <rect x="28" y="0" width="24" height="20" rx="2" fill="#1D9E75" opacity="0.35"/>
+          <rect x="56" y="0" width="24" height="20" rx="2" fill="#1D9E75" opacity="0.3"/>
+          <rect x="84" y="0" width="24" height="20" rx="2" fill="#1D9E75" opacity="0.25"/>
+          <rect x="112" y="0" width="24" height="20" rx="2" fill="#1D9E75" opacity="0.2"/>
+          <rect x="140" y="0" width="24" height="20" rx="2" fill="#1D9E75" opacity="0.15"/>
+          <rect x="168" y="0" width="24" height="20" rx="2" fill="#1D9E75" opacity="0.1"/>
+          <rect x="196" y="0" width="24" height="20" rx="2" fill="#1D9E75" opacity="0.08"/>
+        </g>
+      </g>
+
+      <!-- Chunk 2 (predicted at t+1) -->
+      <g transform="translate(150,95)">
+        <rect x="0" y="0" width="350" height="32" rx="4" fill="#58a6ff" opacity="0.15" stroke="#58a6ff" stroke-width="1"/>
+        <text x="10" y="20" font-size="8" fill="#58a6ff" font-weight="600">chunk @ t+1</text>
+        <g transform="translate(90,6)">
+          <rect x="0" y="0" width="24" height="20" rx="2" fill="#58a6ff" opacity="0.4"/>
+          <rect x="28" y="0" width="24" height="20" rx="2" fill="#58a6ff" opacity="0.35"/>
+          <rect x="56" y="0" width="24" height="20" rx="2" fill="#58a6ff" opacity="0.3"/>
+          <rect x="84" y="0" width="24" height="20" rx="2" fill="#58a6ff" opacity="0.25"/>
+          <rect x="112" y="0" width="24" height="20" rx="2" fill="#58a6ff" opacity="0.2"/>
+          <rect x="140" y="0" width="24" height="20" rx="2" fill="#58a6ff" opacity="0.15"/>
+          <rect x="168" y="0" width="24" height="20" rx="2" fill="#58a6ff" opacity="0.1"/>
+          <rect x="196" y="0" width="24" height="20" rx="2" fill="#58a6ff" opacity="0.08"/>
+        </g>
+      </g>
+
+      <!-- Chunk 3 (predicted at t+2) -->
+      <g transform="translate(220,135)">
+        <rect x="0" y="0" width="350" height="32" rx="4" fill="#A371F7" opacity="0.15" stroke="#A371F7" stroke-width="1"/>
+        <text x="10" y="20" font-size="8" fill="#A371F7" font-weight="600">chunk @ t+2</text>
+        <g transform="translate(90,6)">
+          <rect x="0" y="0" width="24" height="20" rx="2" fill="#A371F7" opacity="0.4"/>
+          <rect x="28" y="0" width="24" height="20" rx="2" fill="#A371F7" opacity="0.35"/>
+          <rect x="56" y="0" width="24" height="20" rx="2" fill="#A371F7" opacity="0.3"/>
+          <rect x="84" y="0" width="24" height="20" rx="2" fill="#A371F7" opacity="0.25"/>
+          <rect x="112" y="0" width="24" height="20" rx="2" fill="#A371F7" opacity="0.2"/>
+          <rect x="140" y="0" width="24" height="20" rx="2" fill="#A371F7" opacity="0.15"/>
+          <rect x="168" y="0" width="24" height="20" rx="2" fill="#A371F7" opacity="0.1"/>
+          <rect x="196" y="0" width="24" height="20" rx="2" fill="#A371F7" opacity="0.08"/>
+        </g>
+      </g>
+
+      <!-- Overlap highlight on t+3 column -->
+      <rect x="293" y="50" width="34" height="130" rx="4" fill="#E3B341" opacity="0.08" stroke="#E3B341" stroke-width="1" stroke-dasharray="3 2">
+        <animate attributeName="opacity" values="0.05;0.15;0.05" dur="2s" repeatCount="indefinite"/>
+      </rect>
+      <text x="310" y="195" text-anchor="middle" font-size="8" fill="#E3B341" font-weight="600">3 predictions</text>
+      <text x="310" y="205" text-anchor="middle" font-size="7" fill="#E3B341">for t+3</text>
+
+      <!-- Formula -->
+      <g transform="translate(100,250)">
+        <rect x="0" y="0" width="500" height="55" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+        <text x="250" y="20" text-anchor="middle" font-size="10" fill="#A371F7" font-weight="600">a(t+3) = w&#x2081; · chunk_t[3] + w&#x2082; · chunk_{t+1}[2] + w&#x2083; · chunk_{t+2}[1]</text>
+        <text x="250" y="40" text-anchor="middle" font-size="10" fill="#8b949e">exponential weighting: recent chunks weighted more → smooth, responsive</text>
+      </g>
+
+      <text x="350" y="340" text-anchor="middle" font-size="10" fill="#484f58">overlapping predictions average out noise — the more overlap, the smoother the motion</text>
+    `;
+  }
+
+  else if (step === 4) {
+    // Result comparison
+    svg.innerHTML = `
+      <text x="350" y="28" text-anchor="middle" font-size="12" fill="#58a6ff" font-weight="600">Action Chunking Powers Modern Robot Policies</text>
+
+      <!-- Side by side comparison -->
+      <!-- Single step -->
+      <g transform="translate(30,50)">
+        <rect x="0" y="0" width="290" height="120" rx="8" fill="#161b22" stroke="#D85A30" stroke-width="1"/>
+        <text x="145" y="22" text-anchor="middle" font-size="10" fill="#D85A30" font-weight="600">Without Chunking (K=1)</text>
+        <!-- Jerky path -->
+        <path d="M20,75 L55,60 L85,80 L110,55 L140,78 L165,58 L195,82 L225,60 L260,76" stroke="#D85A30" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- Target -->
+        <circle cx="260" cy="65" r="8" fill="none" stroke="#D85A30" stroke-width="1" stroke-dasharray="3 2"/>
+        <text x="260" y="68" text-anchor="middle" font-size="7" fill="#D85A30">goal</text>
+        <text x="145" y="108" text-anchor="middle" font-size="9" fill="#6e7681">jerky · oscillating · slow convergence</text>
+      </g>
+
+      <!-- With chunking -->
+      <g transform="translate(370,50)">
+        <rect x="0" y="0" width="290" height="120" rx="8" fill="#161b22" stroke="#1D9E75" stroke-width="1.5"/>
+        <text x="145" y="22" text-anchor="middle" font-size="10" fill="#1D9E75" font-weight="600">With Chunking (K=50)</text>
+        <!-- Smooth path -->
+        <path d="M20,80 Q80,55 145,65 Q210,72 260,62" stroke="#1D9E75" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M20,80 Q80,55 145,65 Q210,72 260,62" stroke="#1D9E75" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.1">
+          <animate attributeName="opacity" values="0.05;0.15;0.05" dur="2s" repeatCount="indefinite"/>
+        </path>
+        <!-- Target -->
+        <circle cx="260" cy="62" r="8" fill="#1D9E75" opacity="0.3"/>
+        <text x="260" y="65" text-anchor="middle" font-size="7" fill="#1D9E75">goal</text>
+        <text x="145" y="108" text-anchor="middle" font-size="9" fill="#6e7681">smooth · consistent · fast convergence</text>
+      </g>
+
+      <!-- Systems using it -->
+      <g transform="translate(50,195)">
+        <rect x="0" y="0" width="600" height="95" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+        <text x="300" y="22" text-anchor="middle" font-size="11" fill="#58a6ff" font-weight="600">Systems built on Action Chunking</text>
+
+        <g transform="translate(30,35)">
+          <rect x="0" y="0" width="100" height="40" rx="6" fill="#1c2333" stroke="#A371F7" stroke-width="0.8"/>
+          <text x="50" y="18" text-anchor="middle" font-size="10" fill="#A371F7" font-weight="600">ACT</text>
+          <text x="50" y="32" text-anchor="middle" font-size="7" fill="#6e7681">Zhao et al. 2023</text>
+        </g>
+
+        <g transform="translate(150,35)">
+          <rect x="0" y="0" width="120" height="40" rx="6" fill="#1c2333" stroke="#D85A30" stroke-width="0.8"/>
+          <text x="60" y="18" text-anchor="middle" font-size="10" fill="#D85A30" font-weight="600">Diffusion Policy</text>
+          <text x="60" y="32" text-anchor="middle" font-size="7" fill="#6e7681">Chi et al. 2023</text>
+        </g>
+
+        <g transform="translate(290,35)">
+          <rect x="0" y="0" width="100" height="40" rx="6" fill="#1c2333" stroke="#1D9E75" stroke-width="0.8"/>
+          <text x="50" y="18" text-anchor="middle" font-size="10" fill="#1D9E75" font-weight="600">&#960;0</text>
+          <text x="50" y="32" text-anchor="middle" font-size="7" fill="#6e7681">Black et al. 2024</text>
+        </g>
+
+        <g transform="translate(410,35)">
+          <rect x="0" y="0" width="150" height="40" rx="6" fill="#1c2333" stroke="#E3B341" stroke-width="0.8"/>
+          <text x="75" y="18" text-anchor="middle" font-size="10" fill="#E3B341" font-weight="600">Octo / RT-2</text>
+          <text x="75" y="32" text-anchor="middle" font-size="7" fill="#6e7681">chunk-based outputs</text>
+        </g>
+      </g>
+
+      <!-- Key numbers -->
+      <g transform="translate(50,310)">
+        <text x="150" y="15" text-anchor="middle" font-size="10" fill="#1D9E75" font-weight="600">K = 50–100 typical</text>
+        <text x="400" y="15" text-anchor="middle" font-size="10" fill="#A371F7" font-weight="600">~30% higher success rate vs K=1</text>
+      </g>
+
+      <text x="350" y="350" text-anchor="middle" font-size="10" fill="#484f58">action chunking is now the default paradigm for robot policy output</text>
+    `;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') navigate(1);
+  if (e.key === 'ArrowLeft') navigate(-1);
+});
+
+goTo(0);
+setTimeout(() => { const s = document.getElementById('viz'); s.classList.add('visible'); }, 50);
+setTimeout(() => { if (current === 0) togglePlay(); }, 3000);
+</script>
+</body>
+</html>

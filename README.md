@@ -18,6 +18,8 @@ Interactive animations explaining core concepts in robotics and embodied intelli
 | Flow Matching | Learning | How flow matching learns straight-line velocity fields to transport noise into action distributions — a faster, simpler alternative to diffusion |
 | World Models — Predict Before You Act | Learning | How robots imagine multiple futures in latent space, score each outcome, and pick the best action before moving |
 | Learning Physics from Video | Learning | How watching billions of internet videos teaches robots gravity, collisions, and object permanence — no physics engine required |
+| Action Chunking — Predict Trajectories, Not Steps | Learning | Why modern robot policies predict K actions at once — the secret behind smooth motion in ACT, Diffusion Policy, and π0 |
+| SLAM — Mapping the Unknown | Perception | How robots simultaneously build a map and figure out where they are — the chicken-and-egg problem at the heart of navigation |
 
 ## Features
 
