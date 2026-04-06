@@ -8,15 +8,15 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#e6edf3;overflow-x:hidden}
 
-.timeline-header{text-align:center;padding:40px 24px 20px}
+.timeline-header{text-align:center;padding:20px 24px 10px}
 .timeline-header h1{font-size:28px;font-weight:700;letter-spacing:-0.5px;background:linear-gradient(135deg,#e6edf3,#58a6ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px}
 .timeline-header p{color:#8b949e;font-size:15px;max-width:520px;margin:0 auto}
 
-.legend{display:flex;justify-content:center;gap:16px;padding:16px 24px 8px;flex-wrap:wrap}
+.legend{display:flex;justify-content:center;gap:16px;padding:8px 24px 4px;flex-wrap:wrap}
 .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:#8b949e}
 .legend-dot{width:10px;height:10px;border-radius:50%}
 
-.timeline-wrap{position:relative;overflow-x:auto;overflow-y:visible;padding:40px 60px 60px;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#30363d #0d1117}
+.timeline-wrap{position:relative;overflow-x:auto;padding:60px 60px 40px;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#30363d #0d1117}
 .timeline-wrap::-webkit-scrollbar{height:6px}
 .timeline-wrap::-webkit-scrollbar-track{background:#0d1117}
 .timeline-wrap::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
@@ -135,8 +135,10 @@ const MODELS = [
   { year: 2025, name: 'Gemini Robotics', desc: 'Gemini-based VLA for physical world', cat: 'foundation', paper: 'https://arxiv.org/abs/2503.20020' },
   { year: 2025, name: 'Helix', desc: 'Dual-system VLA for humanoid control', cat: 'generalist', paper: 'https://www.figure.ai/news/helix' },
   { year: 2025, name: 'π0.5', desc: 'VLA with open-world generalization', cat: 'foundation', paper: 'https://arxiv.org/abs/2504.16054' },
+  { year: 2025, name: 'Gen-0', desc: 'First embodied model to demonstrate scaling laws in robotics', cat: 'foundation', paper: 'https://generalistai.com/blog/nov-04-2025-GEN-0' },
   { year: 2026, name: 'Cosmos Policy', desc: 'NVIDIA world-model-driven robot policy', cat: 'foundation', paper: 'https://arxiv.org/abs/2601.16163', anim: 'world_model_explainer' },
   { year: 2026, name: 'π0.6', desc: 'Next-gen flow matching robot control', cat: 'foundation', paper: 'https://www.pi.website/blog/pistar06' },
+  { year: 2026, name: 'Gen-1', desc: 'Commercially viable general physical AI with 99% task reliability', cat: 'foundation', paper: 'https://generalistai.com/blog/apr-02-2026-GEN-1' },
 ];
 
 const timeline = document.getElementById('timeline');
